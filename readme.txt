@@ -47,6 +47,7 @@ The size of the INDX records. Default is 4096.
 
 Examples:
 Indx2Csv.exe /IndxFile:c:\temp\chunk.wfixups.INDX
+Indx2Csv.exe /IndxFile:c:\temp\chunk.wfixups.INDX /OutputPath:e:\temp
 Indx2Csv.exe /IndxFile:c:\temp\chunk.wfixups.INDX /TimeZone:2.00 /TSFormat:1 /TSPrecision:NanoSec /Unicode:1
 Indx2Csv.exe /IndxFile:c:\temp\chunk.wofixups.INDX /Fixups:0 /TimeZone:-5.00 /TSFormat:1 /TSPrecision:MilliSec
 Indx2Csv.exe /IndxFile:c:\temp\chunk.wofixups.INDX /Fixups:0 /TSFormat:1 /TSPrecision:MilliSec /Slack:1 /Unicode:0
@@ -92,3 +93,13 @@ The available TimeZone's to use are:
 12.45
 13.00
 14.00
+
+Changelog
+
+v1.0.0.1
+Removed timestamp added to output directory.
+Added all output files with prefix Indx_I30_Entries_.
+Added timestamp into output file names.
+
+v1.0.0.0
+Initial version.

@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=Decode INDX records of type $I30
 #AutoIt3Wrapper_Res_Description=Decode INDX records of type $I30
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.0
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.1
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 ;Program assumes input file like IndxCarver creates.
@@ -29,7 +29,7 @@ Global $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"),$outputpath=@ScriptDir,$Pars
 Global $INDXsig = "494E4458", $INDX_Size = 4096, $BinaryFragment
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 
-$Progversion = "Indx2Csv 1.0.0.0"
+$Progversion = "Indx2Csv 1.0.0.1"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -146,28 +146,12 @@ Func _Main()
 	EndIf
 
 	$TimestampStart = @YEAR & "-" & @MON & "-" & @MDAY & "_" & @HOUR & "-" & @MIN & "-" & @SEC
-	;$ParserOutDir = @ScriptDir&"\OpenAttributesTable_"&$TimestampStart
-	#cs
-	$TestOutDir = _WinAPI_PathFindFileName($BinaryFragment)
-	If Not @error Then
-		$TestOutDir = StringReplace($BinaryFragment,$TestOutDir,"")
-		If StringRight($TestOutDir,1)="\" Then $TestOutDir = StringTrimRight($TestOutDir,1)
-	Else
-		ConsoleWrite("Error in PathFindFileName" & @CRLF)
-		Return
-	EndIf
-	_DisplayInfo("$TestOutDir: " & $TestOutDir & @CRLF)
-	#ce
+
 	If Not FileExists($ParserOutDir) Then
-		$ParserOutDir = $BinaryFragment & "_" & $TimestampStart
-		If DirCreate($ParserOutDir) = 0 Then
-			ConsoleWrite("Error creating: " & $ParserOutDir & @CRLF)
-			If Not $CommandlineMode Then _DisplayInfo("Error creating: " & $ParserOutDir & @CRLF)
-			Return
-		EndIf
+		$ParserOutDir = @ScriptDir
 	EndIf
 ;	ConsoleWrite("Output directory: " & $ParserOutDir & @CRLF)
-	$IndxEntriesCsvFile = $ParserOutDir & "\Indx_Entries.csv"
+	$IndxEntriesCsvFile = $ParserOutDir & "\Indx_I30_Entries_" & $TimestampStart & ".csv"
 	$IndxEntriesCsv = FileOpen($IndxEntriesCsvFile, $EncodingWhenOpen)
 	If @error Then
 		ConsoleWrite("Error creating: " & $IndxEntriesCsvFile & @CRLF)
@@ -176,7 +160,7 @@ Func _Main()
 	EndIf
 ;	ConsoleWrite("Created output file: " & $IndxEntriesCsvFile & @CRLF)
 
-	$DebugOutFile = FileOpen($ParserOutDir & "\debug.log", $EncodingWhenOpen)
+	$DebugOutFile = FileOpen($ParserOutDir & "\Indx_I30_Entries_" & $TimestampStart & ".log", $EncodingWhenOpen)
 	If @error Then
 		ConsoleWrite("Error: Could not create log file" & @CRLF)
 		MsgBox(0,"Error","Could not create log file")
