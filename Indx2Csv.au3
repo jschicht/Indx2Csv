@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=Decode INDX records of type $I30
 #AutoIt3Wrapper_Res_Description=Decode INDX records of type $I30
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.1
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.2
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 ;Program assumes input file like IndxCarver creates.
@@ -29,7 +29,7 @@ Global $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"),$outputpath=@ScriptDir,$Pars
 Global $INDXsig = "494E4458", $INDX_Size = 4096, $BinaryFragment
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 
-$Progversion = "Indx2Csv 1.0.0.1"
+$Progversion = "Indx2Csv 1.0.0.2"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -309,6 +309,13 @@ Func _Main()
 		$DoNormalMode=1
 	EndIf
 
+	$IndxI30SqlFile = $ParserOutDir & "\Indx_I30_Entries_" & $TimestampStart & ".sql"
+	FileInstall("C:\temp\import-csv-INDX-I30.sql", $IndxI30SqlFile)
+	$FixedPath = StringReplace($IndxEntriesCsvFile,"\","\\")
+	Sleep(500)
+	_ReplaceStringInFile($IndxI30SqlFile,"__PathToCsv__",$FixedPath)
+	If $TestUnicode = 1 Then _ReplaceStringInFile($IndxI30SqlFile,"latin1", "utf8")
+
 	_DumpOutput("Normal mode: " & $DoNormalMode & @CRLF)
 	_DumpOutput("Scan mode 1: " & $DoScanMode1 & @CRLF)
 	_DumpOutput("Scan mode 2: " & $DoScanMode2 & @CRLF)
@@ -367,7 +374,7 @@ Func _WriteCSVHeaderIndxEntries()
 EndFunc
 
 Func _ParseCoreValidData($InputData)
-	$LocalOffset = 1
+	Local $LocalOffset = 1, $SubNodeVCN
 ;	ConsoleWrite("_ParseCoreData():" & @crlf)
 ;	ConsoleWrite(_HexEncode("0x"&$InputData) & @crlf)
 	While 1
@@ -381,6 +388,7 @@ Func _ParseCoreValidData($InputData)
 		$OffsetToFileName = StringMid($InputData,$LocalOffset+20,4)
 		$OffsetToFileName = Dec(_SwapEndian($OffsetToFileName),2)
 		$IndexFlags = StringMid($InputData,$LocalOffset+24,4)
+		$IndexFlags = Dec(_SwapEndian($IndexFlags),2)
 		$Padding = StringMid($InputData,$LocalOffset+28,4)
 		$MFTReferenceOfParent = StringMid($InputData,$LocalOffset+32,12)
 		$MFTReferenceOfParent = Dec(_SwapEndian($MFTReferenceOfParent),2)
@@ -486,7 +494,7 @@ Func _ParseCoreValidData($InputData)
 		If $LocalOffset >= StringLen($InputData) Then ExitLoop
 
 		If $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal Then
-			FileWriteLine($IndxEntriesCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_NameSpace & $de & $SubNodeVCN & @crlf)
+			FileWriteLine($IndxEntriesCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
 			$LocalOffset += $IndexEntryLength*2
 			$EntryCounter+=1
 			_ClearVar()
@@ -500,7 +508,7 @@ Func _ParseCoreValidData($InputData)
 EndFunc
 
 Func _ParseCoreSlackSpace($InputData,$SkeewedOffset)
-	Local $LocalOffset = 1
+	Local $LocalOffset = 1, $SubNodeVCN
 	$IndxLastLsn = -1
 ;	ConsoleWrite("_ParseCoreSlackSpace():" & @crlf)
 ;	ConsoleWrite(_HexEncode("0x"&$InputData) & @crlf)
@@ -516,6 +524,7 @@ Func _ParseCoreSlackSpace($InputData,$SkeewedOffset)
 		$OffsetToFileName = StringMid($InputData,$LocalOffset+20,4)
 		$OffsetToFileName = Dec(_SwapEndian($OffsetToFileName),2)
 		$IndexFlags = StringMid($InputData,$LocalOffset+24,4)
+		$IndexFlags = Dec(_SwapEndian($IndexFlags),2)
 		$Padding = StringMid($InputData,$LocalOffset+28,4)
 		$MFTReferenceOfParent = StringMid($InputData,$LocalOffset+32,12)
 		$MFTReferenceOfParent = Dec(_SwapEndian($MFTReferenceOfParent),2)

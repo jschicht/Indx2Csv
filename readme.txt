@@ -96,6 +96,10 @@ The available TimeZone's to use are:
 
 Changelog
 
+v1.0.0.2
+Added MySql support and a schema for INDX_I30 table.
+Added missing TextInformation variable in csv in the core module (though not actually used there).
+
 v1.0.0.1
 Removed timestamp added to output directory.
 Added all output files with prefix Indx_I30_Entries_.
