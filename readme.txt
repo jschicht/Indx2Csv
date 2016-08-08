@@ -43,7 +43,12 @@ The separator to put in between MilliSec and NanoSec in the precision of timesta
 A custom error value to put with errors in timestamp decode. Default value is '0000-00-00 00:00:00', which is compatible with MySql, and represents and invalid timestamp value for NTFS.
 /IndxSize:
 The size of the INDX records. Default is 4096.
-
+/VerifyFragment:
+Boolean value for activating a simple validation on a fragment only, and not full parser. Can be 0 or 1. Will by default write fixed fragment to OutFragment.bin unless otherwise specified in /OutFragmentName:
+/OutFragmentName:
+The output filename to write the fixed fragment to, if /VerifyFragment: is set to 1. If omitted, the default filename is OutFragment.bin.
+/CleanUp:
+Boolean value for cleaning up all output if no entries could be decoded. Default value is 1. Can be 0 or 1. This setting makes the most sense if program is run in loop in batch or similar.
 
 Examples:
 Indx2Csv.exe /IndxFile:c:\temp\chunk.wfixups.INDX
@@ -51,6 +56,8 @@ Indx2Csv.exe /IndxFile:c:\temp\chunk.wfixups.INDX /OutputPath:e:\temp
 Indx2Csv.exe /IndxFile:c:\temp\chunk.wfixups.INDX /TimeZone:2.00 /TSFormat:1 /TSPrecision:NanoSec /Unicode:1
 Indx2Csv.exe /IndxFile:c:\temp\chunk.wofixups.INDX /Fixups:0 /TimeZone:-5.00 /TSFormat:1 /TSPrecision:MilliSec
 Indx2Csv.exe /IndxFile:c:\temp\chunk.wofixups.INDX /Fixups:0 /TSFormat:1 /TSPrecision:MilliSec /Slack:1 /Unicode:0
+Indx2Csv.exe /IndxFile:C:\temp\fragment.bin /ScanMode:1 /VerifyFragment:1 /OutputPath:e:\I30Output /OutFragmentName:FragmentCollection.bin /CleanUp:1
+Indx2Csv.exe /IndxFile:e:\I30Output\FragmentCollection.bin /OutputPath:e:\I30Output
 
 The available TimeZone's to use are:
 -12.00
@@ -94,7 +101,20 @@ The available TimeZone's to use are:
 13.00
 14.00
 
+Error levels
+The current exit (error) codes have been implemented in commandline mode, which makes it more suited for batch scripting.
+1. No valid $I30 entries could be decoded. Empty output.
+4. Failure in writing fixed fragment to output. Validation of fragment succeeded though.
+
+Thus if you get %ERRORLEVEL% == 1 it means nothing was decoded, and if you get %ERRORLEVEL% == 4 then valid records where detected but could not be written to separate output (only used with /VerifyFragment: and /OutFragmentName:).
+
 Changelog
+
+v1.0.0.3
+Added 3 new parameters. /VerifyFragment:, /OutFragmentName: and /CleanUp:. See readme.
+Implemented supported for true brute force mode (/ScanMode:1).
+Added exit errorlevel to make it suite better with batch scripting.
+Added postfix of .empty to csv's generated with 0 hits.
 
 v1.0.0.2
 Added MySql support and a schema for INDX_I30 table.

@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=Decode INDX records of type $I30
 #AutoIt3Wrapper_Res_Description=Decode INDX records of type $I30
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.2
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.3
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 ;Program assumes input file like IndxCarver creates.
@@ -18,18 +18,18 @@
 #Include <FileConstants.au3>
 Global $de="|", $PrecisionSeparator=".", $PrecisionSeparator2="",$DateTimeFormat, $TimestampPrecision,$IndxEntriesCsvFile,$IndxEntriesCsv,$CurrentFileOffset,$UTCconfig,$myctredit,$SeparatorInput
 Global $TimestampErrorVal = "0000-00-00 00:00:00",$ExampleTimestampVal = "01CD74B3150770B8"
-Global $DoDefaultAll, $dol2t, $DoBodyfile, $DebugOutFile, $MaxRecords, $CurrentRecord, $WithQuotes, $EncodingWhenOpen = 2, $DoParseSlack=1, $DoFixups=1
+Global $DoDefaultAll, $dol2t, $DoBodyfile, $hDebugOutFile, $MaxRecords, $CurrentRecord, $WithQuotes, $EncodingWhenOpen = 2, $DoParseSlack=1, $DoFixups=1
 Global $CheckSlack,$CheckFixups,$CheckUnicode,$checkquotes
-Global $begin, $ElapsedTime, $EntryCounter, $DoScanMode1=0, $DoScanMode2=0, $DoNormalMode=1, $SectorSize=512
+Global $begin, $ElapsedTime, $EntryCounter, $DoScanMode1=0, $DoNormalMode=1, $SectorSize=512, $ExtendedNameCheckChar=1, $ExtendedNameCheckWindows=1, $ExtendedNameCheckAll=1, $ExtendedTimestampCheck=1
 Global $ProgressStatus, $ProgressIndx
 Global $RecordOffset,$IndxLastLsn,$FromIndxSlack,$MFTReference,$MFTReferenceSeqNo,$IndexFlags,$MFTReferenceOfParent,$MFTReferenceOfParentSeqNo
 Global $Indx_CTime,$Indx_ATime,$Indx_MTime,$Indx_RTime,$Indx_AllocSize,$Indx_RealSize,$Indx_File_Flags,$Indx_ReparseTag,$Indx_FileName,$Indx_NameSpace,$SubNodeVCN,$TextInformation
 Global $SkipUnicodeNames = 1 ;Will improve recovery of entries from slack
 Global $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"),$outputpath=@ScriptDir,$ParserOutDir
-Global $INDXsig = "494E4458", $INDX_Size = 4096, $BinaryFragment
+Global $INDXsig = "494E4458", $INDX_Size = 4096, $BinaryFragment, $RegExPatternHexNotNull = "[1-9a-fA-F]", $CleanUp=0, $VerifyFragment=0, $OutFragmentName="OutFragment.bin", $RebuiltFragment
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 
-$Progversion = "Indx2Csv 1.0.0.2"
+$Progversion = "Indx2Csv 1.0.0.3"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -69,6 +69,8 @@ Else
 	GUICtrlSetState($CheckSlack, $GUI_UNCHECKED)
 	$CheckFixups = GUICtrlCreateCheckbox("Apply fixups", 320, 95, 75, 20)
 	GUICtrlSetState($CheckFixups, $GUI_CHECKED)
+	;$CheckCleanUp = GUICtrlCreateCheckbox("CleanUp", 320, 120, 75, 20)
+	;GUICtrlSetState($CheckCleanUp, $GUI_UNCHECKED)
 
 	$checkl2t = GUICtrlCreateCheckbox("log2timeline", 20, 100, 130, 20)
 	GUICtrlSetState($checkl2t, $GUI_UNCHECKED)
@@ -83,7 +85,7 @@ Else
 	$LabelBrokenData = GUICtrlCreateLabel("Broken data:",130,100,65,20)
 	$CheckScanMode1 = GUICtrlCreateCheckbox("Scan mode 1", 200, 100, 80, 20)
 	GUICtrlSetState($CheckScanMode1, $GUI_UNCHECKED)
-	GUICtrlSetState($CheckScanMode1, $GUI_DISABLE)
+	;GUICtrlSetState($CheckScanMode1, $GUI_DISABLE)
 	$CheckScanMode2 = GUICtrlCreateCheckbox("Scan mode 2", 200, 120, 80, 20)
 	GUICtrlSetState($CheckScanMode2, $GUI_UNCHECKED)
 	GUICtrlSetState($CheckScanMode2, $GUI_DISABLE)
@@ -159,8 +161,8 @@ Func _Main()
 		Return
 	EndIf
 ;	ConsoleWrite("Created output file: " & $IndxEntriesCsvFile & @CRLF)
-
-	$DebugOutFile = FileOpen($ParserOutDir & "\Indx_I30_Entries_" & $TimestampStart & ".log", $EncodingWhenOpen)
+	$DebugOutFile = $ParserOutDir & "\Indx_I30_Entries_" & $TimestampStart & ".log"
+	$hDebugOutFile = FileOpen($ParserOutDir & "\Indx_I30_Entries_" & $TimestampStart & ".log", $EncodingWhenOpen)
 	If @error Then
 		ConsoleWrite("Error: Could not create log file" & @CRLF)
 		MsgBox(0,"Error","Could not create log file")
@@ -289,23 +291,13 @@ Func _Main()
 	EndIf
 
 	If Not $CommandlineMode Then
-		If GUICtrlRead($CheckScanMode1) = 1 And GUICtrlRead($CheckScanMode2) = 1 Then
-			_DisplayInfo("Error: only 1 scan mode possible" & @CRLF)
-			Return
-		EndIf
-
 		If GUICtrlRead($CheckScanMode1) = 1 Then
 			$DoScanMode1 = 1
 			$DoNormalMode = 0
 		EndIf
-
-		If GUICtrlRead($CheckScanMode2) = 1 Then
-			$DoScanMode2 = 1
-			$DoNormalMode = 0
-		EndIf
 	EndIf
 
-	If $DoScanMode1=0 And $DoScanMode2=0 Then
+	If $DoScanMode1=0 Then
 		$DoNormalMode=1
 	EndIf
 
@@ -317,17 +309,16 @@ Func _Main()
 	If $TestUnicode = 1 Then _ReplaceStringInFile($IndxI30SqlFile,"latin1", "utf8")
 
 	_DumpOutput("Normal mode: " & $DoNormalMode & @CRLF)
-	_DumpOutput("Scan mode 1: " & $DoScanMode1 & @CRLF)
-	_DumpOutput("Scan mode 2: " & $DoScanMode2 & @CRLF)
+	_DumpOutput("Scan mode: " & $DoScanMode1 & @CRLF)
 ;----------------------------
 
 	_WriteCSVHeaderIndxEntries()
 	$InputFileSize = _WinAPI_GetFileSizeEx($hFile)
 	$MaxRecords = Ceiling($InputFileSize/$INDX_Size)
-	If Mod($InputFileSize,$INDX_Size) Then
+	If $DoNormalMode And Mod($InputFileSize,$INDX_Size) Then
 		ConsoleWrite("Error: File size not a multiple of INDX size. Last page must have special buffer created." & @CRLF)
 	EndIf
-	$tBuffer = DllStructCreate("byte["&$INDX_Size&"]")
+
 
 	$Progress = GUICtrlCreateLabel("Decoding INDX data and writing to csv", 10, 280,540,20)
 	GUICtrlSetFont($Progress, 12)
@@ -339,33 +330,393 @@ Func _Main()
 	AdlibRegister("_IndxProgress", 500)
 	ConsoleWrite("Parsing input.." & @CRLF)
 
-	For $i = 0 To $MaxRecords-1
-		$CurrentRecord = $i
-		_WinAPI_SetFilePointerEx($hFile, $i*$INDX_Size, $FILE_BEGIN)
-		_WinAPI_ReadFile($hFile, DllStructGetPtr($tBuffer), $INDX_Size, $nBytes)
-		$IndxRecord = DllStructGetData($tBuffer, 1)
-		$CurrentFileOffset = DllCall('kernel32.dll', 'int', 'SetFilePointerEx', 'ptr', $hFile, 'int64', 0, 'int64*', 0, 'dword', 1)
-		$CurrentFileOffset = $CurrentFileOffset[3]-$INDX_Size
-		$RecordOffset = "0x" & Hex(Int($CurrentFileOffset))
-		$ParseStatus = _ParseIndx($IndxRecord)
-		_ClearVar()
-	Next
+	Select
+		Case $DoNormalMode
+			$tBuffer = DllStructCreate("byte["&$INDX_Size&"]")
+			For $i = 0 To $MaxRecords-1
+				$CurrentRecord = $i
+				_WinAPI_SetFilePointerEx($hFile, $i*$INDX_Size, $FILE_BEGIN)
+				_WinAPI_ReadFile($hFile, DllStructGetPtr($tBuffer), $INDX_Size, $nBytes)
+				$IndxRecord = DllStructGetData($tBuffer, 1)
+				$CurrentFileOffset = DllCall('kernel32.dll', 'int', 'SetFilePointerEx', 'ptr', $hFile, 'int64', 0, 'int64*', 0, 'dword', 1)
+				$CurrentFileOffset = $CurrentFileOffset[3]-$INDX_Size
+				$RecordOffset = "0x" & Hex(Int($CurrentFileOffset))
+				$ParseStatus = _ParseIndx($IndxRecord)
+				_ClearVar()
+			Next
+		Case $DoScanMode1
+;			ConsoleWrite("Parsing $DoScanMode1" & @CRLF)
+			$ChunkSize = $SectorSize*100
+			$tBuffer = DllStructCreate("byte[" & ($ChunkSize)+$SectorSize & "]")
+			$MaxPages = Ceiling($InputFileSize/($ChunkSize))
+			For $i = 0 To $MaxPages-1
+;				ConsoleWrite("$i: " & $i & @CRLF)
+				$CurrentPage=$i
+				_WinAPI_SetFilePointerEx($hFile, $i*($ChunkSize), $FILE_BEGIN)
+				If $i = $MaxPages-1 Then $tBuffer = DllStructCreate("byte[" & ($ChunkSize)+$SectorSize & "]")
+				_WinAPI_ReadFile($hFile, DllStructGetPtr($tBuffer), ($ChunkSize)+$SectorSize, $nBytes)
+				$RawPage = DllStructGetData($tBuffer, 1)
+				$CurrentFileOffset = DllCall('kernel32.dll', 'int', 'SetFilePointerEx', 'ptr', $hFile, 'int64', 0, 'int64*', 0, 'dword', 1)
+				$CurrentFileOffset = $CurrentFileOffset[3]-$ChunkSize
+				;$RecordOffset = "0x" & Hex(Int($CurrentFileOffset))
+				$EntryCounter += _ScanModeI30ProcessPage(StringMid($RawPage,3),$i*($ChunkSize),0,$ChunkSize)
+				If Not Mod($i,1000) Then
+					FileFlush($IndxEntriesCsvFile)
+				EndIf
+			Next
+	EndSelect
 
 	AdlibUnRegister("_IndxProgress")
 	$MaxRecords = $CurrentRecord+1
 	_IndxProgress()
 	ProgressOff()
 
-	If Not $CommandlineMode Then _DisplayInfo("Entries parsed: " & $EntryCounter & @CRLF)
+	If $EntryCounter < 1 Then
+		_DumpOutput("Error: No valid $I30 entries could be decoded." & @CRLF)
+		If $CleanUp Then
+			FileFlush($hDebugOutFile)
+			FileClose($hDebugOutFile)
+			FileDelete($IndxEntriesCsvFile)
+			FileDelete($IndxI30SqlFile)
+			FileDelete($DebugOutFile)
+		Else
+			FileMove($IndxEntriesCsvFile,$IndxEntriesCsvFile&".empty",1)
+			_DumpOutput("Empty output: " & $IndxEntriesCsvFile & " is postfixed with .empty" & @CRLF)
+		EndIf
+		If Not $CommandlineMode Then
+			_DisplayInfo("Error: No valid $I30 entries could be decoded." & @CRLF)
+			Return
+		Else
+			Exit(1)
+		EndIf
+	EndIf
+
+	If Not $CommandlineMode Then _DisplayInfo("Entries found and decoded: " & $EntryCounter & @CRLF)
 	_DumpOutput("Pages processed: " & $MaxRecords & @CRLF)
-	_DumpOutput("Entries parsed: " & $EntryCounter & @CRLF)
+	_DumpOutput("Entries found and decoded: " & $EntryCounter & @CRLF)
 	If Not $CommandlineMode Then _DisplayInfo("Parsing finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
 	_DumpOutput("Parsing finished in " & _WinAPI_StrFromTimeInterval(TimerDiff($begin)) & @CRLF)
 	_WinAPI_CloseHandle($hFile)
-	FileFlush($IndxEntriesCsvFile)
-	FileClose($IndxEntriesCsvFile)
+	FileFlush($hDebugOutFile)
+	FileClose($hDebugOutFile)
+	FileFlush($IndxEntriesCsv)
+	FileClose($IndxEntriesCsv)
+
+	If $CleanUp Then
+		FileDelete($IndxEntriesCsvFile)
+		FileDelete($IndxI30SqlFile)
+		FileDelete($DebugOutFile)
+	EndIf
+
 	$ParserOutDir = ""
 	$EntryCounter = 0
+EndFunc
+
+Func _ScanModeI30ProcessPage($TargetPage,$OffsetFile,$OffsetChunk,$EndOffset)
+	Local $LocalEntryCounter = 0, $NextOffset = 1, $TotalSizeOfPage = StringLen($TargetPage)
+;	_DumpOutput("_ScanModeI30ProcessPage" & @CRLF)
+	Do
+;		_DumpOutput("$NextOffset: " & $NextOffset & @CRLF)
+;		_DumpOutput("$NextOffset: 0x" & Hex(Int($OffsetFile + ($OffsetChunk + $NextOffset)/2)) & @CRLF)
+		$SizeOfNextEntry = StringMid($TargetPage,$NextOffset+16,4)
+		$SizeOfNextEntry = Dec(_SwapEndian($SizeOfNextEntry),2)
+		$SizeOfNextEntry = $SizeOfNextEntry*2
+		$NextEntry = StringMid($TargetPage,$NextOffset,$SizeOfNextEntry)
+		If _ScanModeI30DecodeEntry($NextEntry) Then
+;			_DumpOutput("Success" & @CRLF)
+;			_DumpOutput("Found entry at offset 0x" & Hex(Int($CurrentPage*$USN_Page_Size+(($NextOffset-1)/2))) & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$NextUsnRecord) & @CRLF)
+			$OffsetRecord = "0x" & Hex(Int($OffsetFile + ($OffsetChunk + $NextOffset)/2))
+			;$OffsetRecord = $OffsetFile + ($OffsetChunk + $NextOffset)/2
+			$LocalEntryCounter += _NormalModeI30DecodeEntry($NextEntry, $OffsetRecord)
+			$NextOffset+=$SizeOfNextEntry
+;			Return $NextOffset-1
+		Else
+;			_DumpOutput("Error: " & @error & @CRLF)
+			If Not StringRegExp(StringMid($TargetPage,$NextOffset),$RegExPatternHexNotNull) Then
+				_DumpOutput("The data on the rest of this page is just 00. Nothing to do here from offset 0x" & Hex(Int($OffsetFile + ($OffsetChunk + $NextOffset)/2)) & @CRLF)
+				Return $LocalEntryCounter
+			EndIf
+;			_DumpOutput("Bad entry at offset 0x" & Hex(Int($CurrentPage*$USN_Page_Size+(($NextOffset-1)/2))) & @CRLF)
+;			_DumpOutput(_HexEncode("0x"&$NextEntry) & @CRLF)
+			$NextOffset+=2
+		EndIf
+
+	Until $NextOffset > $TotalSizeOfPage Or $NextOffset/2 > $EndOffset
+	Return $LocalEntryCounter
+EndFunc
+
+Func _ScanModeI30DecodeEntry($Record)
+
+	$MFTReference = StringMid($Record,1,12)
+	$MFTReference = Dec(_SwapEndian($MFTReference),2)
+	If $MFTReference = 0 Then Return SetError(1,0,0)
+	$MFTReferenceSeqNo = StringMid($Record,13,4)
+	$MFTReferenceSeqNo = Dec(_SwapEndian($MFTReferenceSeqNo),2)
+	If $MFTReferenceSeqNo = 0 Then Return SetError(2,0,0)
+	;_DumpOutput("Check 1" & @CRLF)
+	$IndexEntryLength = StringMid($Record,17,4)
+	$IndexEntryLength = Dec(_SwapEndian($IndexEntryLength),2)
+	If ($IndexEntryLength = 0) Or ($IndexEntryLength = 0xFFFF) Then Return SetError(3,0,0)
+	;$OffsetToFileName = StringMid($Record,21,4)
+	;$OffsetToFileName = Dec(_SwapEndian($OffsetToFileName),2)
+	;If $OffsetToFileName <> 82 Then Return SetError(4,0,0)
+	;_DumpOutput("Check 2" & @CRLF)
+	;$IndexFlags = StringMid($Record,25,4)
+	;$IndexFlags = Dec(_SwapEndian($IndexFlags),2)
+	;If $IndexFlags <> "0000" Then Return SetError(5,0,0)
+	$Padding = StringMid($Record,29,4)
+	If $Padding <> "0000" Then Return SetError(6,0,0)
+	;_DumpOutput("Check 3" & @CRLF)
+	$MFTReferenceOfParent = StringMid($Record,33,12)
+	$MFTReferenceOfParent = Dec(_SwapEndian($MFTReferenceOfParent),2)
+	If $MFTReferenceOfParent < 5 Then Return SetError(7,0,0)
+	;_DumpOutput("Check 4" & @CRLF)
+	$MFTReferenceOfParentSeqNo = StringMid($Record,45,4)
+	$MFTReferenceOfParentSeqNo = Dec(_SwapEndian($MFTReferenceOfParentSeqNo),2)
+	If $MFTReferenceOfParentSeqNo = 0 Then Return SetError(8,0,0)
+	;_DumpOutput("Check 5" & @CRLF)
+	$CTime_Timestamp = StringMid($Record,49,16)
+	If $ExtendedTimestampCheck Then
+		$CTime_TimestampTmp = Dec(_SwapEndian($CTime_Timestamp),2)
+		If $CTime_TimestampTmp < 112589990684262400 Or $CTime_TimestampTmp > 139611588448485376 Then Return SetError(9,0,0) ;14 oktober 1957 - 31 mai 2043
+	EndIf
+	$CTime_Timestamp = _DecodeTimestamp($CTime_Timestamp)
+	If $CTime_Timestamp = $TimestampErrorVal Then Return SetError(10,0,0)
+	;_DumpOutput("Check 6" & @CRLF)
+	$ATime_Timestamp = StringMid($Record,65,16)
+	If $ExtendedTimestampCheck Then
+		$ATime_TimestampTmp = Dec(_SwapEndian($ATime_Timestamp),2)
+		If $ATime_TimestampTmp < 112589990684262400 Or $ATime_TimestampTmp > 139611588448485376 Then Return SetError(11,0,0) ;14 oktober 1957 - 31 mai 2043
+	EndIf
+	$ATime_Timestamp = _DecodeTimestamp($ATime_Timestamp)
+	If $ATime_Timestamp = $TimestampErrorVal Then Return SetError(12,0,0)
+	;_DumpOutput("Check 7" & @CRLF)
+	$MTime_Timestamp = StringMid($Record,81,16)
+	If $ExtendedTimestampCheck Then
+		$MTime_TimestampTmp = Dec(_SwapEndian($MTime_Timestamp),2)
+		;If $MTime_TimestampTmp < 112589990684262400 Or $MTime_TimestampTmp > 139611588448485376 Then Return SetError(13,0,0) ;14 oktober 1957 - 31 mai 2043
+	EndIf
+	$MTime_Timestamp = _DecodeTimestamp($MTime_Timestamp)
+	;-----------------------
+	;If $MTime_Timestamp = $TimestampErrorVal Then Return SetError(14,0,0)
+	;--------------------------
+	;_DumpOutput("Check 8" & @CRLF)
+	$RTime_Timestamp = StringMid($Record,97,16)
+	If $ExtendedTimestampCheck Then
+		$RTime_TimestampTmp = Dec(_SwapEndian($RTime_Timestamp),2)
+		If $RTime_TimestampTmp < 112589990684262400 Or $RTime_TimestampTmp > 139611588448485376 Then Return SetError(15,0,0) ;14 oktober 1957 - 31 mai 2043
+	EndIf
+	$RTime_Timestamp = _DecodeTimestamp($RTime_Timestamp)
+	If $RTime_Timestamp = $TimestampErrorVal Then Return SetError(16,0,0)
+	;_DumpOutput("Check 9" & @CRLF)
+	$Indx_AllocSize = StringMid($Record,113,16)
+	If $Indx_AllocSize = "FFFFFFFFFFFFFFFF" Then Return SetError(17,0,0)
+	$Indx_AllocSize = Dec(_SwapEndian($Indx_AllocSize),2)
+	If $Indx_AllocSize > 0xFFFFFFFFFFFFFF Then Return SetError(17,0,0)
+	;_DumpOutput("Check 10" & @CRLF)
+	$Indx_RealSize = StringMid($Record,129,16)
+	If $Indx_RealSize = "FFFFFFFFFFFFFFFF" Then Return SetError(18,0,0)
+	$Indx_RealSize = Dec(_SwapEndian($Indx_RealSize),2)
+	If $Indx_RealSize > 0xFFFFFFFFFFFFFF Then Return SetError(18,0,0)
+	If $Indx_RealSize > $Indx_AllocSize Then Return SetError(18,0,0)
+	;_DumpOutput("Check 11" & @CRLF)
+	$Indx_ReparseTag = StringMid($Record,153,8)
+	$Indx_ReparseTag = _SwapEndian($Indx_ReparseTag)
+	$Indx_ReparseTag = _GetReparseType("0x"&$Indx_ReparseTag)
+	If StringInStr($Indx_ReparseTag,"UNKNOWN") Then Return SetError(19,0,0)
+	;_DumpOutput("Check 12" & @CRLF)
+	$Indx_NameLength = StringMid($Record,161,2)
+	$Indx_NameLength = Dec($Indx_NameLength)
+	If $Indx_NameLength = 0 Then Return SetError(20,0,0)
+	;_DumpOutput("Check 13" & @CRLF)
+	$Indx_NameSpace = StringMid($Record,163,2)
+	Select
+		Case $Indx_NameSpace = "00"	;POSIX
+			$Indx_NameSpace = "POSIX"
+		Case $Indx_NameSpace = "01"	;WIN32
+			$Indx_NameSpace = "WIN32"
+		Case $Indx_NameSpace = "02"	;DOS
+			$Indx_NameSpace = "DOS"
+		Case $Indx_NameSpace = "03"	;DOS+WIN32
+			$Indx_NameSpace = "DOS+WIN32"
+		Case Else
+			$Indx_NameSpace = "Unknown"
+	EndSelect
+	If $Indx_NameSpace = "Unknown" Then Return SetError(21,0,0)
+	;_DumpOutput("Check 14" & @CRLF)
+	$Indx_FileName = StringMid($Record,165,$Indx_NameLength*4)
+	$NameTest = 1
+	Select
+		Case $ExtendedNameCheckAll
+;			_DumpOutput("$ExtendedNameCheckAll: " & $ExtendedNameCheckAll & @CRLF)
+			$NameTest = _ValidateCharacterAndWindowsFileName($Indx_FileName)
+		Case $ExtendedNameCheckChar
+;			_DumpOutput("$ExtendedNameCheckChar: " & $ExtendedNameCheckChar & @CRLF)
+			$NameTest = _ValidateCharacter($Indx_FileName)
+		Case $ExtendedNameCheckWindows
+;			_DumpOutput("$ExtendedNameCheckWindows: " & $ExtendedNameCheckWindows & @CRLF)
+			$NameTest = _ValidateWindowsFileName($Indx_FileName)
+	EndSelect
+	If Not $NameTest Then Return SetError(22,0,0)
+	;_DumpOutput("Check 15" & @CRLF)
+	$Indx_FileName = BinaryToString("0x"&$Indx_FileName,2)
+
+	If @error Or $Indx_FileName = "" Or StringLen($Indx_FileName)>$IndexEntryLength*2 Or StringLen($Indx_FileName)>255 Then Return SetError(23,0,0)
+	Return 1
+EndFunc
+
+Func _DecodeTimestamp($StampDecode)
+	$StampDecode = _SwapEndian($StampDecode)
+	$StampDecode_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $StampDecode)
+	$StampDecode = _WinTime_UTCFileTimeFormat(Dec($StampDecode,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+	If @error Then
+		$StampDecode = $TimestampErrorVal
+	ElseIf $TimestampPrecision = 3 Then
+		$StampDecode = $StampDecode & $PrecisionSeparator2 & _FillZero(StringRight($StampDecode_tmp, 4))
+	EndIf
+	Return $StampDecode
+EndFunc
+
+Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
+	$LocalOffset=1
+	;$RecordOffset = "0x" & Hex(Int($CurrentFileOffset + (($LocalOffset-1)/2)))
+	$RecordOffset = $OffsetRecord
+	$MFTReference = StringMid($InputData,$LocalOffset,12)
+	$MFTReference = Dec(_SwapEndian($MFTReference),2)
+	$MFTReferenceSeqNo = StringMid($InputData,$LocalOffset+12,4)
+	$MFTReferenceSeqNo = Dec(_SwapEndian($MFTReferenceSeqNo),2)
+	$IndexEntryLength = StringMid($InputData,$LocalOffset+16,4)
+	$IndexEntryLength = Dec(_SwapEndian($IndexEntryLength),2)
+	$OffsetToFileName = StringMid($InputData,$LocalOffset+20,4)
+	$OffsetToFileName = Dec(_SwapEndian($OffsetToFileName),2)
+	$IndexFlags = StringMid($InputData,$LocalOffset+24,4)
+	$IndexFlags = Dec(_SwapEndian($IndexFlags),2)
+	$Padding = StringMid($InputData,$LocalOffset+28,4)
+	$MFTReferenceOfParent = StringMid($InputData,$LocalOffset+32,12)
+	$MFTReferenceOfParent = Dec(_SwapEndian($MFTReferenceOfParent),2)
+	$MFTReferenceOfParentSeqNo = StringMid($InputData,$LocalOffset+44,4)
+	$MFTReferenceOfParentSeqNo = Dec(_SwapEndian($MFTReferenceOfParentSeqNo),2)
+
+	$Indx_CTime = StringMid($InputData, $LocalOffset + 48, 16)
+	$Indx_CTime = _SwapEndian($Indx_CTime)
+	$Indx_CTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_CTime)
+	$Indx_CTime = _WinTime_UTCFileTimeFormat(Dec($Indx_CTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+	If @error Then
+		$Indx_CTime = $TimestampErrorVal
+	ElseIf $TimestampPrecision = 2 Then
+		$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-4)
+		$Indx_CTime_Precision = StringRight($Indx_CTime,3)
+	ElseIf $TimestampPrecision = 3 Then
+		$Indx_CTime = $Indx_CTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_CTime_tmp, 4))
+		$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-9)
+		$Indx_CTime_Precision = StringRight($Indx_CTime,8)
+	Else
+		$Indx_CTime_Core = $Indx_CTime
+	EndIf
+	;
+	$Indx_ATime = StringMid($InputData, $LocalOffset + 64, 16)
+	$Indx_ATime = _SwapEndian($Indx_ATime)
+	$Indx_ATime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_ATime)
+	$Indx_ATime = _WinTime_UTCFileTimeFormat(Dec($Indx_ATime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+	If @error Then
+		$Indx_ATime = $TimestampErrorVal
+	ElseIf $TimestampPrecision = 2 Then
+		$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-4)
+		$Indx_ATime_Precision = StringRight($Indx_ATime,3)
+	ElseIf $TimestampPrecision = 3 Then
+		$Indx_ATime = $Indx_ATime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_ATime_tmp, 4))
+		$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-9)
+		$Indx_ATime_Precision = StringRight($Indx_ATime,8)
+	Else
+		$Indx_ATime_Core = $Indx_ATime
+	EndIf
+	;
+	$Indx_MTime = StringMid($InputData, $LocalOffset + 80, 16)
+	$Indx_MTime = _SwapEndian($Indx_MTime)
+	$Indx_MTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_MTime)
+	$Indx_MTime = _WinTime_UTCFileTimeFormat(Dec($Indx_MTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+	If @error Then
+		$Indx_MTime = $TimestampErrorVal
+	ElseIf $TimestampPrecision = 2 Then
+		$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-4)
+		$Indx_MTime_Precision = StringRight($Indx_MTime,3)
+	ElseIf $TimestampPrecision = 3 Then
+		$Indx_MTime = $Indx_MTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_MTime_tmp, 4))
+		$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-9)
+		$Indx_MTime_Precision = StringRight($Indx_MTime,8)
+	Else
+		$Indx_MTime_Core = $Indx_MTime
+	EndIf
+	;
+	$Indx_RTime = StringMid($InputData, $LocalOffset + 96, 16)
+	$Indx_RTime = _SwapEndian($Indx_RTime)
+	$Indx_RTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_RTime)
+	$Indx_RTime = _WinTime_UTCFileTimeFormat(Dec($Indx_RTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
+	If @error Then
+		$Indx_RTime = $TimestampErrorVal
+	ElseIf $TimestampPrecision = 2 Then
+		$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-4)
+		$Indx_RTime_Precision = StringRight($Indx_RTime,3)
+	ElseIf $TimestampPrecision = 3 Then
+		$Indx_RTime = $Indx_RTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_RTime_tmp, 4))
+		$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-9)
+		$Indx_RTime_Precision = StringRight($Indx_RTime,8)
+	Else
+		$Indx_RTime_Core = $Indx_RTime
+	EndIf
+	;
+	$Indx_AllocSize = StringMid($InputData,$LocalOffset+112,16)
+	$Indx_AllocSize = Dec(_SwapEndian($Indx_AllocSize),2)
+	$Indx_RealSize = StringMid($InputData,$LocalOffset+128,16)
+	$Indx_RealSize = Dec(_SwapEndian($Indx_RealSize),2)
+	$Indx_File_Flags = StringMid($InputData,$LocalOffset+144,8)
+	$Indx_File_Flags = _SwapEndian($Indx_File_Flags)
+	$Indx_File_Flags = _File_Attributes("0x" & $Indx_File_Flags)
+	$Indx_ReparseTag = StringMid($InputData,$LocalOffset+152,8)
+	$Indx_ReparseTag = _SwapEndian($Indx_ReparseTag)
+	$Indx_ReparseTag = _GetReparseType("0x"&$Indx_ReparseTag)
+	$Indx_NameLength = StringMid($InputData,$LocalOffset+160,2)
+	$Indx_NameLength = Dec($Indx_NameLength)
+	$Indx_NameSpace = StringMid($InputData,$LocalOffset+162,2)
+	Select
+		Case $Indx_NameSpace = "00"	;POSIX
+			$Indx_NameSpace = "POSIX"
+		Case $Indx_NameSpace = "01"	;WIN32
+			$Indx_NameSpace = "WIN32"
+		Case $Indx_NameSpace = "02"	;DOS
+			$Indx_NameSpace = "DOS"
+		Case $Indx_NameSpace = "03"	;DOS+WIN32
+			$Indx_NameSpace = "DOS+WIN32"
+		Case Else
+			$Indx_NameSpace = "Unknown"
+	EndSelect
+	$Indx_FileName = StringMid($InputData,$LocalOffset+164,$Indx_NameLength*4)
+	$Indx_FileName = BinaryToString("0x"&$Indx_FileName,2)
+
+	If $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal Then
+		If $VerifyFragment Then
+			$RebuiltFragment = "0x" & StringMid($InputData,1)
+			;ConsoleWrite(_HexEncode($RebuiltFragment) & @CRLF)
+			_WriteOutputFragment()
+			If @error Then
+				If Not $CommandlineMode Then
+					_DisplayInfo("Output fragment was verified but could not be written to: " & $ParserOutDir & "\" & $OutFragmentName & @CRLF)
+					Return SetError(1)
+				Else
+					_DumpOutput("Output fragment was verified but could not be written to: " & $ParserOutDir & "\" & $OutFragmentName & @CRLF)
+					Exit(4)
+				EndIf
+			Else
+				ConsoleWrite("Output fragment verified and written to: " & $ParserOutDir & "\" & $OutFragmentName & @CRLF)
+			EndIf
+		EndIf
+		If Not $CleanUp Then FileWriteLine($IndxEntriesCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
+		Return 1
+	Else
+		ConsoleWrite("Error: Validation of entry failed." & @CRLF)
+		Return 0
+	EndIf
 EndFunc
 
 Func _WriteCSVHeaderIndxEntries()
@@ -1097,35 +1448,6 @@ Func _ClearVar()
 	$TextInformation = ""
 EndFunc
 
-Func _ValidateAnsiName($InputString)
-;ConsoleWrite("$InputString: " & $InputString & @CRLF)
-	$StringLength = StringLen($InputString)
-	For $i = 1 To $StringLength Step 4
-		$TestChunk = StringMid($InputString,$i,4)
-		$TestChunk = Dec(_SwapEndian($TestChunk),2)
-		If ($TestChunk >= 32 And $TestChunk < 127) Then
-			ContinueLoop
-		Else
-			Return 0
-		EndIf
-	Next
-	Return 1
-EndFunc
-
-Func _ValidateWindowsFileName($InputString)
-	$StringLength = StringLen($InputString)
-	For $i = 1 To $StringLength Step 4
-		$TestChunk = StringMid($InputString,$i,4)
-		$TestChunk = Dec(_SwapEndian($TestChunk),2)
-		If ($TestChunk <> 47 And $TestChunk <> 92 And $TestChunk <> 58 And $TestChunk <> 42 And $TestChunk <> 63 And $TestChunk <> 34 And $TestChunk <> 60 And $TestChunk <> 62) Then
-			ContinueLoop
-		Else
-			Return 0
-		EndIf
-	Next
-	Return 1
-EndFunc
-
 Func _GetInputParams()
 	Local $TimeZone, $OutputFormat, $ScanMode
 	For $i = 1 To $cmdline[0]
@@ -1146,29 +1468,24 @@ Func _GetInputParams()
 		If StringLeft($cmdline[$i],23) = "/TSPrecisionSeparator2:" Then $PrecisionSeparator2 = StringMid($cmdline[$i],24)
 		If StringLeft($cmdline[$i],12) = "/TSErrorVal:" Then $TimestampErrorVal = StringMid($cmdline[$i],13)
 		If StringLeft($cmdline[$i],10) = "/IndxSize:" Then $INDX_Size = StringMid($cmdline[$i],11)
+		If StringLeft($cmdline[$i],9) = "/CleanUp:" Then $CleanUp = StringMid($cmdline[$i],10)
+		If StringLeft($cmdline[$i],16) = "/VerifyFragment:" Then $VerifyFragment = StringMid($cmdline[$i],17)
+		If StringLeft($cmdline[$i],17) = "/OutFragmentName:" Then $OutFragmentName = StringMid($cmdline[$i],18)
 	Next
 
 	If StringLen($ScanMode) > 0 Then
-		If $ScanMode <> 0 And $ScanMode <> 1 And $ScanMode <> 2 Then
-			ConsoleWrite("Error: Incorect ScanMode: " & $ScanMode & @CRLF)
-			Exit
+		If $ScanMode <> 1 Then
+			$ScanMode = 0
 		EndIf
-	Else
-		$ScanMode = 0
 	EndIf
+
 	Select
 		case $ScanMode = 0
 			$DoNormalMode = 1
 			$DoScanMode1 = 0
-			$DoScanMode2 = 0
 		case $ScanMode = 1
 			$DoNormalMode = 0
 			$DoScanMode1 = 1
-			$DoScanMode2 = 0
-		case $ScanMode = 2
-			$DoNormalMode = 0
-			$DoScanMode1 = 0
-			$DoScanMode2 = 1
 	EndSelect
 
 	If StringLen($TimeZone) > 0 Then
@@ -1289,6 +1606,25 @@ Func _GetInputParams()
 		EndIf
 		$DoFixups = $CheckFixups
 	EndIf
+
+	If StringLen($VerifyFragment) > 0 Then
+		If $VerifyFragment <> 1 Then
+			$VerifyFragment = 0
+		EndIf
+	EndIf
+
+	If StringLen($OutFragmentName) > 0 Then
+		If StringInStr($OutFragmentName,"\") Then
+			ConsoleWrite("Error: OutFragmentName must be a filename and not a path." & @CRLF)
+			Exit
+		EndIf
+	EndIf
+
+	If StringLen($CleanUp) > 0 Then
+		If $CleanUp <> 1 Then
+			$CleanUp = 0
+		EndIf
+	EndIf
 EndFunc
 
 Func _DisplayInfo($DebugInfo)
@@ -1408,5 +1744,100 @@ EndFunc
 
 Func _DumpOutput($text)
    ConsoleWrite($text)
-   If $DebugOutFile Then FileWrite($DebugOutFile, $text)
+   If $hDebugOutFile Then FileWrite($hDebugOutFile, $text)
+EndFunc
+
+Func _ValidateCharacter($InputString)
+;ConsoleWrite("$InputString: " & $InputString & @CRLF)
+	$StringLength = StringLen($InputString)
+	For $i = 1 To $StringLength Step 4
+		$TestChunk = StringMid($InputString,$i,4)
+		$TestChunk = Dec(_SwapEndian($TestChunk),2)
+		If ($TestChunk > 31 And $TestChunk < 256) Then
+			ContinueLoop
+		Else
+			Return 0
+		EndIf
+	Next
+	Return 1
+EndFunc
+
+Func _ValidateAnsiName($InputString)
+;ConsoleWrite("$InputString: " & $InputString & @CRLF)
+	$StringLength = StringLen($InputString)
+	For $i = 1 To $StringLength Step 4
+		$TestChunk = StringMid($InputString,$i,4)
+		$TestChunk = Dec(_SwapEndian($TestChunk),2)
+		If ($TestChunk >= 32 And $TestChunk < 127) Then
+			ContinueLoop
+		Else
+			Return 0
+		EndIf
+	Next
+	Return 1
+EndFunc
+
+Func _ValidateWindowsFileName($InputString)
+	$StringLength = StringLen($InputString)
+	For $i = 1 To $StringLength Step 4
+		$TestChunk = StringMid($InputString,$i,4)
+		$TestChunk = Dec(_SwapEndian($TestChunk),2)
+		If ($TestChunk <> 47 And $TestChunk <> 92 And $TestChunk <> 58 And $TestChunk <> 42 And $TestChunk <> 63 And $TestChunk <> 34 And $TestChunk <> 60 And $TestChunk <> 62) Then
+			ContinueLoop
+		Else
+			Return 0
+		EndIf
+	Next
+	Return 1
+EndFunc
+
+Func _ValidateCharacterAndWindowsFileName($InputString)
+;ConsoleWrite("$InputString: " & $InputString & @CRLF)
+	$StringLength = StringLen($InputString)
+	For $i = 1 To $StringLength Step 4
+		$TestChunk = StringMid($InputString,$i,4)
+		$TestChunk = Dec(_SwapEndian($TestChunk),2)
+		If ($TestChunk > 31 And $TestChunk < 256) Then
+			If ($TestChunk <> 47 And $TestChunk <> 92 And $TestChunk <> 58 And $TestChunk <> 42 And $TestChunk <> 63 And $TestChunk <> 34 And $TestChunk <> 60 And $TestChunk <> 62) Then
+				ContinueLoop
+			Else
+				Return 0
+			EndIf
+			ContinueLoop
+		Else
+			Return 0
+		EndIf
+	Next
+	Return 1
+EndFunc
+
+Func _WriteOutputFragment()
+	Local $nBytes, $Offset
+
+	$Size = BinaryLen($RebuiltFragment)
+	$Size2 = $Size
+	If Mod($Size,0x8) Then
+		ConsoleWrite("SizeOf $RebuiltFragment: " & $Size & @CRLF)
+		While 1
+			$RebuiltFragment &= "00"
+			$Size2 += 1
+			If Mod($Size2,0x8) = 0 Then ExitLoop
+		WEnd
+		ConsoleWrite("Corrected SizeOf $RebuiltFragment: " & $Size2 & @CRLF)
+	EndIf
+
+	Local $tBuffer = DllStructCreate("byte[" & $Size2 & "]")
+	DllStructSetData($tBuffer,1,$RebuiltFragment)
+	If @error Then Return SetError(1)
+	Local $OutFile = $ParserOutDir & "\" & $OutFragmentName
+	If Not FileExists($OutFile) Then
+		$Offset = 0
+	Else
+		$Offset = FileGetSize($OutFile)
+	EndIf
+	Local $hFileOut = _WinAPI_CreateFile("\\.\" & $OutFile,3,6,7)
+	If Not $hFileOut Then Return SetError(1)
+	_WinAPI_SetFilePointerEx($hFileOut, $Offset, $FILE_BEGIN)
+	If Not _WinAPI_WriteFile($hFileOut, DllStructGetPtr($tBuffer), DllStructGetSize($tBuffer), $nBytes) Then Return SetError(1)
+	_WinAPI_CloseHandle($hFileOut)
 EndFunc
