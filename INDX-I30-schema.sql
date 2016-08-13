@@ -20,6 +20,6 @@ CREATE TABLE INDX_I30(
 	,`ReparseTag`				VARCHAR(32) NOT NULL
 	,`NameSpace`				VARCHAR(9) NOT NULL
 	,`SubNodeVCN`				BIGINT NULL DEFAULT NULL
-	,`TextInformation`          VARCHAR(255) NULL DEFAULT NULL
+	,`CorruptEntries`          VARCHAR(255) NULL DEFAULT NULL
 	,PRIMARY KEY (Id)
 );

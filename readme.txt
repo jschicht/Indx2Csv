@@ -49,6 +49,8 @@ Boolean value for activating a simple validation on a fragment only, and not ful
 The output filename to write the fixed fragment to, if /VerifyFragment: is set to 1. If omitted, the default filename is OutFragment.bin.
 /CleanUp:
 Boolean value for cleaning up all output if no entries could be decoded. Default value is 1. Can be 0 or 1. This setting makes the most sense if program is run in loop in batch or similar.
+/ScanMode:
+An integer indicating the depth level of scan mode. 0 is normal mode without any scanning and is the default value. 1 is light level scanning. 15 is deepest level
 
 Examples:
 Indx2Csv.exe /IndxFile:c:\temp\chunk.wfixups.INDX
@@ -56,8 +58,8 @@ Indx2Csv.exe /IndxFile:c:\temp\chunk.wfixups.INDX /OutputPath:e:\temp
 Indx2Csv.exe /IndxFile:c:\temp\chunk.wfixups.INDX /TimeZone:2.00 /TSFormat:1 /TSPrecision:NanoSec /Unicode:1
 Indx2Csv.exe /IndxFile:c:\temp\chunk.wofixups.INDX /Fixups:0 /TimeZone:-5.00 /TSFormat:1 /TSPrecision:MilliSec
 Indx2Csv.exe /IndxFile:c:\temp\chunk.wofixups.INDX /Fixups:0 /TSFormat:1 /TSPrecision:MilliSec /Slack:1 /Unicode:0
-Indx2Csv.exe /IndxFile:C:\temp\fragment.bin /ScanMode:1 /VerifyFragment:1 /OutputPath:e:\I30Output /OutFragmentName:FragmentCollection.bin /CleanUp:1
-Indx2Csv.exe /IndxFile:e:\I30Output\FragmentCollection.bin /OutputPath:e:\I30Output
+Indx2Csv.exe /IndxFile:C:\temp\fragment.bin /ScanMode:10 /VerifyFragment:1 /OutputPath:e:\I30Output /OutFragmentName:FragmentCollection.bin /CleanUp:1
+Indx2Csv.exe /IndxFile:e:\I30Output\FragmentCollection.bin /OutputPath:e:\I30Output /ScanMode:10 /Fixups:0
 
 The available TimeZone's to use are:
 -12.00
@@ -109,6 +111,10 @@ The current exit (error) codes have been implemented in commandline mode, which 
 Thus if you get %ERRORLEVEL% == 1 it means nothing was decoded, and if you get %ERRORLEVEL% == 4 then valid records where detected but could not be written to separate output (only used with /VerifyFragment: and /OutFragmentName:).
 
 Changelog
+
+v1.0.0.4
+Changed name of field in csv and db from TextInformation to CorruptEntries.
+Improved detection of corrupt entries. Changed logic in ScanMode handling, from being a tickbox on/off to a dropdown with levels from 0 to 15.
 
 v1.0.0.3
 Added 3 new parameters. /VerifyFragment:, /OutFragmentName: and /CleanUp:. See readme.
