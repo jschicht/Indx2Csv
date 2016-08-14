@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=Decode INDX records of type $I30
 #AutoIt3Wrapper_Res_Description=Decode INDX records of type $I30
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.5
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.6
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 ;Program assumes input file like IndxCarver creates.
@@ -29,7 +29,7 @@ Global $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"),$outputpath=@ScriptDir,$Pars
 Global $INDXsig = "494E4458", $INDX_Size = 4096, $BinaryFragment, $RegExPatternHexNotNull = "[1-9a-fA-F]", $CleanUp=0, $VerifyFragment=0, $OutFragmentName="OutFragment.bin", $RebuiltFragment
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 
-$Progversion = "Indx2Csv 1.0.0.5"
+$Progversion = "Indx2Csv 1.0.0.6"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -911,13 +911,13 @@ Func _WriteCSVHeaderIndxEntries()
 	FileWriteLine($IndxEntriesCsvFile, $Indx_Csv_Header & @CRLF)
 EndFunc
 
-Func _ParseCoreValidData($InputData)
+Func _ParseCoreValidData($InputData,$FirstEntryOffset)
 	Local $LocalOffset = 1, $SubNodeVCN
 	$TextInformation=""
 ;	ConsoleWrite("_ParseCoreData():" & @crlf)
 ;	ConsoleWrite(_HexEncode("0x"&$InputData) & @crlf)
 	While 1
-		$RecordOffset = "0x" & Hex(Int($CurrentFileOffset + (($LocalOffset-1)/2)))
+		$RecordOffset = "0x" & Hex(Int($CurrentFileOffset + (($LocalOffset-1)/2) + $FirstEntryOffset))
 		$MFTReference = StringMid($InputData,$LocalOffset,12)
 		$MFTReference = Dec(_SwapEndian($MFTReference),2)
 		$MFTReferenceSeqNo = StringMid($InputData,$LocalOffset+12,4)
@@ -1024,12 +1024,12 @@ Func _ParseCoreValidData($InputData)
 				$Indx_ReparseTag = StringMid($InputData,$LocalOffset+152,8)
 				$Indx_ReparseTag = _SwapEndian($Indx_ReparseTag)
 				$Indx_ReparseTag = _GetReparseType("0x"&$Indx_ReparseTag)
-				If StringInStr($Indx_ReparseTag,"UNKNOWN") Then Return SetError(19,0,0)
+				;If StringInStr($Indx_ReparseTag,"UNKNOWN") Then Return SetError(19,0,0)
 			Case $DoEaSize
 				$Indx_ReparseTag = ""
 				$Indx_EaSize = StringMid($InputData,$LocalOffset+152,8)
 				$Indx_EaSize = Dec(_SwapEndian($Indx_EaSize),2)
-				If $Indx_EaSize < 1 Then Return SetError(19,0,0)
+				;If $Indx_EaSize < 8 Then Return SetError(19,0,0)
 		EndSelect
 		$Indx_NameLength = StringMid($InputData,$LocalOffset+160,2)
 		$Indx_NameLength = Dec($Indx_NameLength)
@@ -1180,12 +1180,12 @@ Func _ParseCoreSlackSpace($InputData,$SkeewedOffset)
 				$Indx_ReparseTag = StringMid($InputData,$LocalOffset+152,8)
 				$Indx_ReparseTag = _SwapEndian($Indx_ReparseTag)
 				$Indx_ReparseTag = _GetReparseType("0x"&$Indx_ReparseTag)
-				If StringInStr($Indx_ReparseTag,"UNKNOWN") Then Return SetError(19,0,0)
+;				If StringInStr($Indx_ReparseTag,"UNKNOWN") Then Return SetError(19,0,0)
 			Case $DoEaSize
 				$Indx_ReparseTag = ""
 				$Indx_EaSize = StringMid($InputData,$LocalOffset+152,8)
 				$Indx_EaSize = Dec(_SwapEndian($Indx_EaSize),2)
-				If $Indx_EaSize < 1 Then Return SetError(19,0,0)
+;				If $Indx_EaSize < 8 Then Return SetError(19,0,0)
 		EndSelect
 		$Indx_NameLength = StringMid($InputData,$LocalOffset+160,2)
 		$Indx_NameLength = Dec($Indx_NameLength)
@@ -1228,7 +1228,11 @@ Func _ParseCoreSlackSpace($InputData,$SkeewedOffset)
 
 		If $FileNameHealthy And $Indx_NameLength > 0 And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal And $Indx_NameSpace <> "Unknown" And $Indx_ReparseTag <> "UNKNOWN" And $Indx_AllocSize >= $Indx_RealSize And Mod($Indx_AllocSize,8)=0 Then
 			If $MFTReferenceSeqNo = 0 Then $TextInformation &= ";MftRef;MftRefSeqNo"
+			If $IndexFlags > 2 Then $TextInformation &= ";IndexFlags"
+			If $Padding <> "0000" Then $TextInformation &= ";Padding"
 			If $MFTReferenceOfParentSeqNo = 0 Then $TextInformation &= ";MFTReferenceOfParent;MFTReferenceOfParentSeqNo"
+			If ($DoReparseTag And StringInStr($Indx_ReparseTag,"UNKNOWN")) Then $TextInformation &= ";ReparseTag"
+			If ($DoEaSize And $Indx_EaSize < 8) Then $TextInformation &= ";EaSize"
 			FileWriteLine($IndxEntriesCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
 			If $IndexEntryLength = 0 Then $IndexEntryLength = (32+26+$Indx_NameLength)*2
 			$LocalOffset += $IndexEntryLength*2
@@ -1300,7 +1304,7 @@ Func _ParseIndx($InputData)
 
 	If Not ((24+$IndxHeaderSize) >= ($IndxRealSizeAllEntries+8)) Then
 		$FromIndxSlack = 0
-		_ParseCoreValidData(StringMid($InputData,$LocalOffset+48+($IndxHeaderSize*2),($IndxRealSizeAllEntries+8)*2))
+		_ParseCoreValidData(StringMid($InputData,$LocalOffset+48+($IndxHeaderSize*2),($IndxRealSizeAllEntries+8)*2),24+$IndxHeaderSize)
 		If $DoParseSlack Then
 			$FromIndxSlack = 1
 			_ParseCoreSlackSpace(StringMid($InputData,$LocalOffset+($IndxRealSizeAllEntries+8)*2),($IndxRealSizeAllEntries+8)*2)

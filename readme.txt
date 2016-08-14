@@ -112,6 +112,10 @@ Thus if you get %ERRORLEVEL% == 1 it means nothing was decoded, and if you get %
 
 Changelog
 
+v1.0.0.6
+Fixed wrong offset in output for entries parsed in normal mode with healthy INDX structure.
+Removed unecessary failure check with slack scan in Normal mode with healthy INDX structure.
+
 v1.0.0.5
 Added field for EaSize in output.
 Added validation test for IndexFlags.
