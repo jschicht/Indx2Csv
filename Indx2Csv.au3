@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=Decode INDX records of type $I30
 #AutoIt3Wrapper_Res_Description=Decode INDX records of type $I30
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.4
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.5
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 ;Program assumes input file like IndxCarver creates.
@@ -29,7 +29,7 @@ Global $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"),$outputpath=@ScriptDir,$Pars
 Global $INDXsig = "494E4458", $INDX_Size = 4096, $BinaryFragment, $RegExPatternHexNotNull = "[1-9a-fA-F]", $CleanUp=0, $VerifyFragment=0, $OutFragmentName="OutFragment.bin", $RebuiltFragment
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 
-$Progversion = "Indx2Csv 1.0.0.4"
+$Progversion = "Indx2Csv 1.0.0.5"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -455,9 +455,12 @@ Func _ScanModeI30DecodeEntry($Record)
 	;$OffsetToFileName = StringMid($Record,21,4)
 	;$OffsetToFileName = Dec(_SwapEndian($OffsetToFileName),2)
 	;If $OffsetToFileName <> 82 Then Return SetError(4,0,0)
-	;$IndexFlags = StringMid($Record,25,4)
-	;$IndexFlags = Dec(_SwapEndian($IndexFlags),2)
-	;If $IndexFlags <> "0000" Then Return SetError(5,0,0)
+	$IndexFlags = StringMid($Record,25,4)
+	$IndexFlags = Dec(_SwapEndian($IndexFlags),2)
+	If Not $VerifyFragment And $ScanMode < 3 Then
+		If $IndexFlags > 2 Then Return SetError(5,0,0)
+	EndIf
+
 	$Padding = StringMid($Record,29,4)
 	If Not $VerifyFragment And $ScanMode < 4 Then
 		If $Padding <> "0000" Then Return SetError(6,0,0)
@@ -516,10 +519,33 @@ Func _ScanModeI30DecodeEntry($Record)
 		Return SetError(18,0,0)
 	EndIf
 	If $Indx_RealSize > $Indx_AllocSize Then Return SetError(18,0,0)
-	$Indx_ReparseTag = StringMid($Record,153,8)
-	$Indx_ReparseTag = _SwapEndian($Indx_ReparseTag)
-	$Indx_ReparseTag = _GetReparseType("0x"&$Indx_ReparseTag)
-	If StringInStr($Indx_ReparseTag,"UNKNOWN") Then Return SetError(19,0,0)
+
+	$Indx_File_Flags = StringMid($Record,145,8)
+	$Indx_File_Flags = _SwapEndian($Indx_File_Flags)
+
+	If BitAND("0x" & $Indx_File_Flags, 0x40000) Then
+		$DoReparseTag=0
+		$DoEaSize=1
+	Else
+		$DoReparseTag=1
+		$DoEaSize=0
+	EndIf
+	$Indx_File_Flags = _File_Attributes("0x" & $Indx_File_Flags)
+
+	Select
+		Case $DoReparseTag
+			$Indx_EaSize = ""
+			$Indx_ReparseTag = StringMid($Record,153,8)
+			$Indx_ReparseTag = _SwapEndian($Indx_ReparseTag)
+			$Indx_ReparseTag = _GetReparseType("0x"&$Indx_ReparseTag)
+			If StringInStr($Indx_ReparseTag,"UNKNOWN") Then Return SetError(19,0,0)
+		Case $DoEaSize
+			$Indx_ReparseTag = ""
+			$Indx_EaSize = StringMid($Record,153,8)
+			$Indx_EaSize = Dec(_SwapEndian($Indx_EaSize),2)
+			If $Indx_EaSize < 8 Then Return SetError(19,0,0)
+	EndSelect
+
 	$Indx_NameLength = StringMid($Record,161,2)
 	$Indx_NameLength = Dec($Indx_NameLength)
 	If $Indx_NameLength = 0 Then Return SetError(20,0,0)
@@ -605,12 +631,17 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 
 	$IndexFlags = StringMid($InputData,$LocalOffset+24,4)
 	$IndexFlags = Dec(_SwapEndian($IndexFlags),2)
+	If $IndexFlags > 2 Then
+		If $ScanMode < 3 Then Return SetError(5,0,0)
+		If $TextInformation = "" Then $TextInformation &= ";MftRef;MftRefSeqNo;IndexEntryLength;OffsetToFileName"
+		$TextInformation &= ";IndexFlags"
+	EndIf
 
 	$Padding = StringMid($InputData,$LocalOffset+28,4)
 	If $Padding <> "0000" Then
 		If $ScanMode < 4 Then Return SetError(6,0,0)
-		If $TextInformation = "" Then $TextInformation &= ";MftRef;MftRefSeqNo;IndexEntryLength;OffsetToFileName"
-		$TextInformation &= ";IndexFlags;Padding"
+		If $TextInformation = "" Then $TextInformation &= ";MftRef;MftRefSeqNo;IndexEntryLength;OffsetToFileName;IndexFlags"
+		$TextInformation &= ";Padding"
 	EndIf
 	$MFTReferenceOfParent = StringMid($InputData,$LocalOffset+32,12)
 	$MFTReferenceOfParent = Dec(_SwapEndian($MFTReferenceOfParent),2)
@@ -763,6 +794,7 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 		If $ScanMode < 11 Then Return SetError(18,0,0)
 		$TextInformation &= ";RealSize"
 	EndIf
+	#cs
 	$Indx_File_Flags = StringMid($InputData,$LocalOffset+144,8)
 	$Indx_File_Flags = _SwapEndian($Indx_File_Flags)
 	$Indx_File_Flags = _File_Attributes("0x" & $Indx_File_Flags)
@@ -773,6 +805,40 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 		If $ScanMode < 13 Then Return SetError(19,0,0)
 		$TextInformation &= ";ReparseTag"
 	EndIf
+	#ce
+	;-----------------------------------------------
+	$Indx_File_Flags = StringMid($InputData,$LocalOffset+144,8)
+	$Indx_File_Flags = _SwapEndian($Indx_File_Flags)
+
+	If BitAND("0x" & $Indx_File_Flags, 0x40000) Then
+		$DoReparseTag=0
+		$DoEaSize=1
+	Else
+		$DoReparseTag=1
+		$DoEaSize=0
+	EndIf
+	$Indx_File_Flags = _File_Attributes("0x" & $Indx_File_Flags)
+
+	Select
+		Case $DoReparseTag
+			$Indx_EaSize = ""
+			$Indx_ReparseTag = StringMid($InputData,$LocalOffset+152,8)
+			$Indx_ReparseTag = _SwapEndian($Indx_ReparseTag)
+			$Indx_ReparseTag = _GetReparseType("0x"&$Indx_ReparseTag)
+			If StringInStr($Indx_ReparseTag,"UNKNOWN") Then
+				If $ScanMode < 13 Then Return SetError(19,0,0)
+				$TextInformation &= ";ReparseTag"
+			EndIf
+		Case $DoEaSize
+			$Indx_ReparseTag = ""
+			$Indx_EaSize = StringMid($InputData,$LocalOffset+152,8)
+			$Indx_EaSize = Dec(_SwapEndian($Indx_EaSize),2)
+			If $Indx_EaSize < 8 Then
+				If $ScanMode < 13 Then Return SetError(19,0,0)
+				$TextInformation &= ";EaSize"
+			EndIf
+	EndSelect
+	;--------------------------------------------
 	$Indx_NameLength = StringMid($InputData,$LocalOffset+160,2)
 	$Indx_NameLength = Dec($Indx_NameLength)
 	If $Indx_NameLength = 0 Then
@@ -796,9 +862,6 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 		If $ScanMode < 14 Then Return SetError(21,0,0)
 		$TextInformation &= ";NameSpace"
 	EndIf
-
-	;$Indx_FileName = StringMid($InputData,$LocalOffset+164,$Indx_NameLength*4)
-	;$Indx_FileName = BinaryToString("0x"&$Indx_FileName,2)
 
 	$Indx_FileName = StringMid($InputData,165,$Indx_NameLength*4)
 	$NameTest = 1
@@ -839,12 +902,12 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 			ConsoleWrite("Output fragment verified and written to: " & $ParserOutDir & "\" & $OutFragmentName & @CRLF)
 		EndIf
 	EndIf
-	If Not $CleanUp Then FileWriteLine($IndxEntriesCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & 1 & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
+	If Not $CleanUp Then FileWriteLine($IndxEntriesCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & 1 & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
 	Return 1
 EndFunc
 
 Func _WriteCSVHeaderIndxEntries()
-	$Indx_Csv_Header = "Offset"&$de&"LastLsn"&$de&"FromIndxSlack"&$de&"FileName"&$de&"MFTReference"&$de&"MFTReferenceSeqNo"&$de&"IndexFlags"&$de&"MFTParentReference"&$de&"MFTParentReferenceSeqNo"&$de&"CTime"&$de&"ATime"&$de&"MTime"&$de&"RTime"&$de&"AllocSize"&$de&"RealSize"&$de&"FileFlags"&$de&"ReparseTag"&$de&"NameSpace"&$de&"SubNodeVCN"&$de&"CorruptEntries"
+	$Indx_Csv_Header = "Offset"&$de&"LastLsn"&$de&"FromIndxSlack"&$de&"FileName"&$de&"MFTReference"&$de&"MFTReferenceSeqNo"&$de&"IndexFlags"&$de&"MFTParentReference"&$de&"MFTParentReferenceSeqNo"&$de&"CTime"&$de&"ATime"&$de&"MTime"&$de&"RTime"&$de&"AllocSize"&$de&"RealSize"&$de&"FileFlags"&$de&"ReparseTag"&$de&"EaSize"&$de&"NameSpace"&$de&"SubNodeVCN"&$de&"CorruptEntries"
 	FileWriteLine($IndxEntriesCsvFile, $Indx_Csv_Header & @CRLF)
 EndFunc
 
@@ -945,10 +1008,29 @@ Func _ParseCoreValidData($InputData)
 		$Indx_RealSize = Dec(_SwapEndian($Indx_RealSize),2)
 		$Indx_File_Flags = StringMid($InputData,$LocalOffset+144,8)
 		$Indx_File_Flags = _SwapEndian($Indx_File_Flags)
+
+		If BitAND("0x" & $Indx_File_Flags, 0x40000) Then
+			$DoReparseTag=0
+			$DoEaSize=1
+		Else
+			$DoReparseTag=1
+			$DoEaSize=0
+		EndIf
 		$Indx_File_Flags = _File_Attributes("0x" & $Indx_File_Flags)
-		$Indx_ReparseTag = StringMid($InputData,$LocalOffset+152,8)
-		$Indx_ReparseTag = _SwapEndian($Indx_ReparseTag)
-		$Indx_ReparseTag = _GetReparseType("0x"&$Indx_ReparseTag)
+
+		Select
+			Case $DoReparseTag
+				$Indx_EaSize = ""
+				$Indx_ReparseTag = StringMid($InputData,$LocalOffset+152,8)
+				$Indx_ReparseTag = _SwapEndian($Indx_ReparseTag)
+				$Indx_ReparseTag = _GetReparseType("0x"&$Indx_ReparseTag)
+				If StringInStr($Indx_ReparseTag,"UNKNOWN") Then Return SetError(19,0,0)
+			Case $DoEaSize
+				$Indx_ReparseTag = ""
+				$Indx_EaSize = StringMid($InputData,$LocalOffset+152,8)
+				$Indx_EaSize = Dec(_SwapEndian($Indx_EaSize),2)
+				If $Indx_EaSize < 1 Then Return SetError(19,0,0)
+		EndSelect
 		$Indx_NameLength = StringMid($InputData,$LocalOffset+160,2)
 		$Indx_NameLength = Dec($Indx_NameLength)
 		$Indx_NameSpace = StringMid($InputData,$LocalOffset+162,2)
@@ -970,7 +1052,7 @@ Func _ParseCoreValidData($InputData)
 		If $LocalOffset >= StringLen($InputData) Then ExitLoop
 
 		If $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal Then
-			FileWriteLine($IndxEntriesCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
+			FileWriteLine($IndxEntriesCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
 			$LocalOffset += $IndexEntryLength*2
 			$EntryCounter+=1
 			_ClearVar()
@@ -1082,10 +1164,29 @@ Func _ParseCoreSlackSpace($InputData,$SkeewedOffset)
 		$Indx_RealSize = Dec(_SwapEndian($Indx_RealSize),2)
 		$Indx_File_Flags = StringMid($InputData,$LocalOffset+144,8)
 		$Indx_File_Flags = _SwapEndian($Indx_File_Flags)
+
+		If BitAND("0x" & $Indx_File_Flags, 0x40000) Then
+			$DoReparseTag=0
+			$DoEaSize=1
+		Else
+			$DoReparseTag=1
+			$DoEaSize=0
+		EndIf
 		$Indx_File_Flags = _File_Attributes("0x" & $Indx_File_Flags)
-		$Indx_ReparseTag = StringMid($InputData,$LocalOffset+152,8)
-		$Indx_ReparseTag = _SwapEndian($Indx_ReparseTag)
-		$Indx_ReparseTag = _GetReparseType("0x"&$Indx_ReparseTag)
+
+		Select
+			Case $DoReparseTag
+				$Indx_EaSize = ""
+				$Indx_ReparseTag = StringMid($InputData,$LocalOffset+152,8)
+				$Indx_ReparseTag = _SwapEndian($Indx_ReparseTag)
+				$Indx_ReparseTag = _GetReparseType("0x"&$Indx_ReparseTag)
+				If StringInStr($Indx_ReparseTag,"UNKNOWN") Then Return SetError(19,0,0)
+			Case $DoEaSize
+				$Indx_ReparseTag = ""
+				$Indx_EaSize = StringMid($InputData,$LocalOffset+152,8)
+				$Indx_EaSize = Dec(_SwapEndian($Indx_EaSize),2)
+				If $Indx_EaSize < 1 Then Return SetError(19,0,0)
+		EndSelect
 		$Indx_NameLength = StringMid($InputData,$LocalOffset+160,2)
 		$Indx_NameLength = Dec($Indx_NameLength)
 		$Indx_NameSpace = StringMid($InputData,$LocalOffset+162,2)
@@ -1128,7 +1229,7 @@ Func _ParseCoreSlackSpace($InputData,$SkeewedOffset)
 		If $FileNameHealthy And $Indx_NameLength > 0 And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal And $Indx_NameSpace <> "Unknown" And $Indx_ReparseTag <> "UNKNOWN" And $Indx_AllocSize >= $Indx_RealSize And Mod($Indx_AllocSize,8)=0 Then
 			If $MFTReferenceSeqNo = 0 Then $TextInformation &= ";MftRef;MftRefSeqNo"
 			If $MFTReferenceOfParentSeqNo = 0 Then $TextInformation &= ";MFTReferenceOfParent;MFTReferenceOfParentSeqNo"
-			FileWriteLine($IndxEntriesCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
+			FileWriteLine($IndxEntriesCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
 			If $IndexEntryLength = 0 Then $IndexEntryLength = (32+26+$Indx_NameLength)*2
 			$LocalOffset += $IndexEntryLength*2
 			$EntryCounter+=1

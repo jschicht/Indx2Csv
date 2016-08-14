@@ -18,6 +18,7 @@ CREATE TABLE INDX_I30(
 	,`RealSize`					BIGINT  NOT NULL
 	,`FileFlags`				VARCHAR(64) NOT NULL
 	,`ReparseTag`				VARCHAR(32) NOT NULL
+	,`EaSize`					INT(11) NOT NULL
 	,`NameSpace`				VARCHAR(9) NOT NULL
 	,`SubNodeVCN`				BIGINT NULL DEFAULT NULL
 	,`CorruptEntries`          VARCHAR(255) NULL DEFAULT NULL

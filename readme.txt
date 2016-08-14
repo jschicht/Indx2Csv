@@ -112,6 +112,10 @@ Thus if you get %ERRORLEVEL% == 1 it means nothing was decoded, and if you get %
 
 Changelog
 
+v1.0.0.5
+Added field for EaSize in output.
+Added validation test for IndexFlags.
+
 v1.0.0.4
 Changed name of field in csv and db from TextInformation to CorruptEntries.
 Improved detection of corrupt entries. Changed logic in ScanMode handling, from being a tickbox on/off to a dropdown with levels from 0 to 15.
