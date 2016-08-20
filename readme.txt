@@ -109,35 +109,3 @@ The current exit (error) codes have been implemented in commandline mode, which 
 4. Failure in writing fixed fragment to output. Validation of fragment succeeded though.
 
 Thus if you get %ERRORLEVEL% == 1 it means nothing was decoded, and if you get %ERRORLEVEL% == 4 then valid records where detected but could not be written to separate output (only used with /VerifyFragment: and /OutFragmentName:).
-
-Changelog
-
-v1.0.0.6
-Fixed wrong offset in output for entries parsed in normal mode with healthy INDX structure.
-Removed unecessary failure check with slack scan in Normal mode with healthy INDX structure.
-
-v1.0.0.5
-Added field for EaSize in output.
-Added validation test for IndexFlags.
-
-v1.0.0.4
-Changed name of field in csv and db from TextInformation to CorruptEntries.
-Improved detection of corrupt entries. Changed logic in ScanMode handling, from being a tickbox on/off to a dropdown with levels from 0 to 15.
-
-v1.0.0.3
-Added 3 new parameters. /VerifyFragment:, /OutFragmentName: and /CleanUp:. See readme.
-Implemented supported for true brute force mode (/ScanMode:1).
-Added exit errorlevel to make it suite better with batch scripting.
-Added postfix of .empty to csv's generated with 0 hits.
-
-v1.0.0.2
-Added MySql support and a schema for INDX_I30 table.
-Added missing TextInformation variable in csv in the core module (though not actually used there).
-
-v1.0.0.1
-Removed timestamp added to output directory.
-Added all output files with prefix Indx_I30_Entries_.
-Added timestamp into output file names.
-
-v1.0.0.0
-Initial version.

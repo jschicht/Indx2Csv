@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=Decode INDX records of type $I30
 #AutoIt3Wrapper_Res_Description=Decode INDX records of type $I30
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.6
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.7
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 ;Program assumes input file like IndxCarver creates.
@@ -29,7 +29,7 @@ Global $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"),$outputpath=@ScriptDir,$Pars
 Global $INDXsig = "494E4458", $INDX_Size = 4096, $BinaryFragment, $RegExPatternHexNotNull = "[1-9a-fA-F]", $CleanUp=0, $VerifyFragment=0, $OutFragmentName="OutFragment.bin", $RebuiltFragment
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 
-$Progversion = "Indx2Csv 1.0.0.6"
+$Progversion = "Indx2Csv 1.0.0.7"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -438,6 +438,7 @@ EndFunc
 Func _ScanModeI30DecodeEntry($Record)
 
 	$MFTReference = StringMid($Record,1,12)
+	If $MFTReference = "FFFFFFFFFFFF" Then Return SetError(1,0,0)
 	$MFTReference = Dec(_SwapEndian($MFTReference),2)
 	If Not $VerifyFragment And $ScanMode < 1 Then
 		If $MFTReference = 0 Then Return SetError(1,0,0)
@@ -510,7 +511,7 @@ Func _ScanModeI30DecodeEntry($Record)
 	If $Indx_AllocSize > 281474976710655 Then ;0xFFFFFFFFFFFF
 		Return SetError(17,0,0)
 	EndIf
-	If Mod($Indx_AllocSize,512) Then
+	If $Indx_AllocSize > 0 And Mod($Indx_AllocSize,8) Then
 		Return SetError(17,0,0)
 	EndIf
 	$Indx_RealSize = StringMid($Record,129,16)
@@ -601,6 +602,10 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 	;$RecordOffset = "0x" & Hex(Int($CurrentFileOffset + (($LocalOffset-1)/2)))
 	$RecordOffset = $OffsetRecord
 	$MFTReference = StringMid($InputData,$LocalOffset,12)
+	If $MFTReference = "FFFFFFFFFFFF" Then
+		If $ScanMode < 1 Then Return SetError(1,0,0)
+		$TextInformation &= ";MftRef"
+	EndIf
 	$MFTReference = Dec(_SwapEndian($MFTReference),2)
 	If $MFTReference = 0 Then
 		If $ScanMode < 1 Then Return SetError(1,0,0)
@@ -780,7 +785,7 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 		If $ScanMode < 10 Then Return SetError(17,0,0)
 		$TextInformation &= ";AllocSize"
 	EndIf
-	If Mod($Indx_AllocSize,512) Then
+	If $Indx_AllocSize > 0 And Mod($Indx_AllocSize,8) Then
 		If $ScanMode < 10 Then Return SetError(17,0,0)
 		$TextInformation &= ";AllocSize"
 	EndIf
