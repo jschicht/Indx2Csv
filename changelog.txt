@@ -1,5 +1,11 @@
 Indx2Csv Changelog
 
+v1.0.0.8
+Fixed some bugs in the cleanup after end of parsing.
+Added support for dumping the decode of $O index (both $INDEX_ALLOCATION and $INDEX_ROOT) for $ObjId to a separate csv. Requires Scan mode = 0.
+Added break down of GUID/UUID as found in $ObjectId attribute and $O index of $ObjId, according to RFC 4122 (https://www.ietf.org/rfc/rfc4122.txt). That among other things includes timestamp.
+Added MySql schema and import sql for Indx-ObjIdO-Entries_<timestamp>.csv to INDX_OBJIDO table.
+
 v1.0.0.7
 Fixed bug that caused directory entries and entries for resident files, not to be detected while in scan mode.
 

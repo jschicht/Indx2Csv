@@ -1,4 +1,6 @@
-This is a parser for INDX records of type $I30. Specifically this is the $INDEX_ALLOCATION attribute for directories which is an index with certain values from the $STANDARD_INFORMATION and $FILE_NAME attributes of all subitems (items within a folder).
+This is a parser for INDX records of type $I30 and $O ($ObjId). 
+For $I30 this is the $INDEX_ALLOCATION attribute for directories which is an index with certain values from the $STANDARD_INFORMATION and $FILE_NAME attributes of all subitems (items within a folder).
+For $ObjId there is an $O index (in $INDEX_ALLOCATION and/or $INDEX_ROOT) that holds data for all files on the volume that contain an $ObjectId attribute in their MFT record. In order to scan for this, make sure Scan mode = 0.
 
 On NTFS there are various types of INDX present in addition to $I30:
 $INDEX_ALLOCATION:$SDH for $Secure. This is MftRef 9 and is the security descriptor hash index.

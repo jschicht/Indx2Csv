@@ -1,10 +1,9 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
-#AutoIt3Wrapper_Icon=..\..\..\Program Files (x86)\autoit-v3.3.14.2\Icons\au3.ico
-#AutoIt3Wrapper_UseUpx=y
+#AutoIt3Wrapper_Icon=C:\Program Files (x86)\AutoIt3\Icons\au3.ico
 #AutoIt3Wrapper_Change2CUI=y
-#AutoIt3Wrapper_Res_Comment=Decode INDX records of type $I30
-#AutoIt3Wrapper_Res_Description=Decode INDX records of type $I30
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.7
+#AutoIt3Wrapper_Res_Comment=Decode INDX records
+#AutoIt3Wrapper_Res_Description=Decode INDX records
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.8
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 ;Program assumes input file like IndxCarver creates.
@@ -16,9 +15,9 @@
 #include <EditConstants.au3>
 #include <GuiEdit.au3>
 #Include <FileConstants.au3>
-Global $de="|", $PrecisionSeparator=".", $PrecisionSeparator2="",$DateTimeFormat, $TimestampPrecision,$IndxEntriesCsvFile,$IndxEntriesCsv,$CurrentFileOffset,$UTCconfig,$myctredit,$SeparatorInput
-Global $TimestampErrorVal = "0000-00-00 00:00:00",$ExampleTimestampVal = "01CD74B3150770B8"
-Global $DoDefaultAll, $dol2t, $DoBodyfile, $hDebugOutFile, $MaxRecords, $CurrentRecord, $WithQuotes, $EncodingWhenOpen = 2, $DoParseSlack=1, $DoFixups=1
+Global $de="|", $PrecisionSeparator=".", $PrecisionSeparator2="",$DateTimeFormat, $TimestampPrecision,$IndxEntriesI30CsvFile,$IndxEntriesI30Csv,$CurrentFileOffset,$UTCconfig,$myctredit,$SeparatorInput
+Global $TimestampErrorVal = "0000-00-00 00:00:00",$ExampleTimestampVal = "01CD74B3150770B8", $IndxEntriesObjIdOCsvFile, $IndxEntriesObjIdOCsv
+Global $DoDefaultAll, $dol2t, $DoBodyfile, $hDebugOutFile, $hDebugObjIdOOutFile, $MaxRecords, $CurrentRecord, $WithQuotes, $EncodingWhenOpen = 2, $DoParseSlack=1, $DoFixups=1
 Global $CheckSlack,$CheckFixups,$CheckUnicode,$checkquotes
 Global $begin, $ElapsedTime, $EntryCounter, $ScanMode, $SectorSize=512, $ExtendedNameCheckChar=1, $ExtendedNameCheckWindows=1, $ExtendedNameCheckAll=1, $ExtendedTimestampCheck=1
 Global $ProgressStatus, $ProgressIndx
@@ -28,8 +27,9 @@ Global $SkipUnicodeNames = 1 ;Will improve recovery of entries from slack
 Global $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"),$outputpath=@ScriptDir,$ParserOutDir
 Global $INDXsig = "494E4458", $INDX_Size = 4096, $BinaryFragment, $RegExPatternHexNotNull = "[1-9a-fA-F]", $CleanUp=0, $VerifyFragment=0, $OutFragmentName="OutFragment.bin", $RebuiltFragment
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
+Global $TimeDiff = 5748192000000000
 
-$Progversion = "Indx2Csv 1.0.0.7"
+$Progversion = "Indx2Csv 1.0.0.8"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -148,15 +148,17 @@ Func _Main()
 	If Not FileExists($ParserOutDir) Then
 		$ParserOutDir = @ScriptDir
 	EndIf
+
+	;$I30
 ;	ConsoleWrite("Output directory: " & $ParserOutDir & @CRLF)
-	$IndxEntriesCsvFile = $ParserOutDir & "\Indx_I30_Entries_" & $TimestampStart & ".csv"
-	$IndxEntriesCsv = FileOpen($IndxEntriesCsvFile, $EncodingWhenOpen)
+	$IndxEntriesI30CsvFile = $ParserOutDir & "\Indx_I30_Entries_" & $TimestampStart & ".csv"
+	$IndxEntriesI30Csv = FileOpen($IndxEntriesI30CsvFile, $EncodingWhenOpen)
 	If @error Then
-		ConsoleWrite("Error creating: " & $IndxEntriesCsvFile & @CRLF)
-		If Not $CommandlineMode Then _DisplayInfo("Error creating: " & $IndxEntriesCsvFile & @CRLF)
+		ConsoleWrite("Error creating: " & $IndxEntriesI30CsvFile & @CRLF)
+		If Not $CommandlineMode Then _DisplayInfo("Error creating: " & $IndxEntriesI30CsvFile & @CRLF)
 		Return
 	EndIf
-;	ConsoleWrite("Created output file: " & $IndxEntriesCsvFile & @CRLF)
+;	ConsoleWrite("Created output file: " & $IndxEntriesI30CsvFile & @CRLF)
 	$DebugOutFile = $ParserOutDir & "\Indx_I30_Entries_" & $TimestampStart & ".log"
 	$hDebugOutFile = FileOpen($ParserOutDir & "\Indx_I30_Entries_" & $TimestampStart & ".log", $EncodingWhenOpen)
 	If @error Then
@@ -165,9 +167,26 @@ Func _Main()
 		Exit
 	EndIf
 
+	;$ObjId:$O
+	$IndxEntriesObjIdOCsvFile = $ParserOutDir & "\Indx_ObjIdO_Entries_" & $TimestampStart & ".csv"
+	$IndxEntriesObjIdOCsv = FileOpen($IndxEntriesObjIdOCsvFile, $EncodingWhenOpen)
+	If @error Then
+		ConsoleWrite("Error creating: " & $IndxEntriesObjIdOCsvFile & @CRLF)
+		If Not $CommandlineMode Then _DisplayInfo("Error creating: " & $IndxEntriesObjIdOCsvFile & @CRLF)
+		Return
+	EndIf
+	$DebugObjIdOOutFile = $ParserOutDir & "\Indx_ObjIdO_Entries_" & $TimestampStart & ".log"
+	$hDebugObjIdOOutFile = FileOpen($ParserOutDir & "\Indx_ObjIdO_Entries_" & $TimestampStart & ".log", $EncodingWhenOpen)
+	If @error Then
+		ConsoleWrite("Error: Could not create log file" & @CRLF)
+		MsgBox(0,"Error","Could not create log file")
+		Exit
+	EndIf
+
 	_DumpOutput("Input file: " & $BinaryFragment & @CRLF)
 	_DumpOutput("Output directory: " & $ParserOutDir & @CRLF)
-	_DumpOutput("Csv: " & $IndxEntriesCsvFile & @CRLF)
+	_DumpOutput("Csv: " & $IndxEntriesI30CsvFile & @CRLF)
+	_DumpOutput("Csv: " & $IndxEntriesObjIdOCsvFile & @CRLF)
 
 ;---------------------
 	If Not $CommandlineMode Then
@@ -292,21 +311,29 @@ Func _Main()
 
 	$IndxI30SqlFile = $ParserOutDir & "\Indx_I30_Entries_" & $TimestampStart & ".sql"
 	FileInstall("C:\temp\import-csv-INDX-I30.sql", $IndxI30SqlFile)
-	$FixedPath = StringReplace($IndxEntriesCsvFile,"\","\\")
+	$FixedPath = StringReplace($IndxEntriesI30CsvFile,"\","\\")
 	Sleep(500)
 	_ReplaceStringInFile($IndxI30SqlFile,"__PathToCsv__",$FixedPath)
 	If $TestUnicode = 1 Then _ReplaceStringInFile($IndxI30SqlFile,"latin1", "utf8")
+
+	$IndxObjectIdSqlFile = $OutputPath & "\Indx_ObjIdO_Entries_"&$TimestampStart&".sql"
+	FileInstall("C:\temp\import-csv-indx-objido.sql", $IndxObjectIdSqlFile)
+	$FixedPath = StringReplace($IndxEntriesObjIdOCsvFile,"\","\\")
+	Sleep(500)
+	_ReplaceStringInFile($IndxObjectIdSqlFile,"__PathToCsv__",$FixedPath)
+	If $CheckUnicode = 1 Then _ReplaceStringInFile($IndxObjectIdSqlFile,"latin1", "utf8")
 
 	_DumpOutput("Scan mode: " & $ScanMode & @CRLF)
 ;----------------------------
 
 	_WriteCSVHeaderIndxEntries()
+	_WriteIndxObjIdOModuleCsvHeader()
+
 	$InputFileSize = _WinAPI_GetFileSizeEx($hFile)
 	$MaxRecords = Ceiling($InputFileSize/$INDX_Size)
 	If $ScanMode=0 And Mod($InputFileSize,$INDX_Size) Then
 		ConsoleWrite("Error: File size not a multiple of INDX size. Last page must have special buffer created." & @CRLF)
 	EndIf
-
 
 	$Progress = GUICtrlCreateLabel("Decoding INDX data and writing to csv", 10, 280,540,20)
 	GUICtrlSetFont($Progress, 12)
@@ -329,7 +356,7 @@ Func _Main()
 				$CurrentFileOffset = DllCall('kernel32.dll', 'int', 'SetFilePointerEx', 'ptr', $hFile, 'int64', 0, 'int64*', 0, 'dword', 1)
 				$CurrentFileOffset = $CurrentFileOffset[3]-$INDX_Size
 				$RecordOffset = "0x" & Hex(Int($CurrentFileOffset))
-				$ParseStatus = _ParseIndx($IndxRecord)
+				$EntryCounter += _ParseIndx($IndxRecord)
 				_ClearVar()
 			Next
 		Case $ScanMode > 0
@@ -348,7 +375,7 @@ Func _Main()
 				;$RecordOffset = "0x" & Hex(Int($CurrentFileOffset))
 				$EntryCounter += _ScanModeI30ProcessPage(StringMid($RawPage,3),$i*($ChunkSize),0,$ChunkSize)
 				If Not Mod($i,1000) Then
-					FileFlush($IndxEntriesCsvFile)
+					FileFlush($IndxEntriesI30CsvFile)
 				EndIf
 			Next
 	EndSelect
@@ -363,15 +390,23 @@ Func _Main()
 		If $CleanUp Then
 			FileFlush($hDebugOutFile)
 			FileClose($hDebugOutFile)
-			FileDelete($IndxEntriesCsvFile)
+			FileDelete($IndxEntriesI30CsvFile)
+			FileDelete($IndxEntriesObjIdOCsvFile)
 			FileDelete($IndxI30SqlFile)
+			FileDelete($IndxObjectIdSqlFile)
 			FileDelete($DebugOutFile)
 		Else
-			FileMove($IndxEntriesCsvFile,$IndxEntriesCsvFile&".empty",1)
-			_DumpOutput("Empty output: " & $IndxEntriesCsvFile & " is postfixed with .empty" & @CRLF)
+			FileMove($IndxEntriesI30CsvFile,$IndxEntriesI30CsvFile&".empty",1)
+			_DumpOutput("Empty output: " & $IndxEntriesI30CsvFile & " is postfixed with .empty" & @CRLF)
+			FileMove($IndxEntriesObjIdOCsvFile,$IndxEntriesObjIdOCsvFile&".empty",1)
+			_DumpOutput("Empty output: " & $IndxEntriesObjIdOCsvFile & " is postfixed with .empty" & @CRLF)
+;			If (_FileCountLines($IndxEntriesObjIdOCsvFile) < 2) Then
+;				FileMove($IndxEntriesObjIdOCsvFile,$IndxEntriesObjIdOCsvFile&".empty",1)
+;				_DumpOutput("Empty output: " & $IndxEntriesObjIdOCsvFile & " is postfixed with .empty")
+;			EndIf
 		EndIf
 		If Not $CommandlineMode Then
-			_DisplayInfo("Error: No valid $I30 entries could be decoded." & @CRLF)
+			_DisplayInfo("Error: No valid $I30 or $O entries could be decoded." & @CRLF)
 			Return
 		Else
 			Exit(1)
@@ -386,13 +421,26 @@ Func _Main()
 	_WinAPI_CloseHandle($hFile)
 	FileFlush($hDebugOutFile)
 	FileClose($hDebugOutFile)
-	FileFlush($IndxEntriesCsv)
-	FileClose($IndxEntriesCsv)
+	FileFlush($IndxEntriesI30Csv)
+	FileClose($IndxEntriesI30Csv)
+	FileFlush($IndxEntriesObjIdOCsv)
+	FileClose($IndxEntriesObjIdOCsv)
 
 	If $CleanUp Then
-		FileDelete($IndxEntriesCsvFile)
+		FileDelete($IndxEntriesI30CsvFile)
+		FileDelete($IndxEntriesObjIdOCsvFile)
 		FileDelete($IndxI30SqlFile)
+		FileDelete($IndxObjectIdSqlFile)
 		FileDelete($DebugOutFile)
+	Else
+		If (_FileCountLines($IndxEntriesI30CsvFile) < 2) Then
+			FileMove($IndxEntriesI30CsvFile,$IndxEntriesI30CsvFile&".empty",1)
+			_DumpOutput("Empty output: " & $IndxEntriesI30CsvFile & " is postfixed with .empty")
+		EndIf
+		If (_FileCountLines($IndxEntriesObjIdOCsvFile) < 2) Then
+			FileMove($IndxEntriesObjIdOCsvFile,$IndxEntriesObjIdOCsvFile&".empty",1)
+			_DumpOutput("Empty output: " & $IndxEntriesObjIdOCsvFile & " is postfixed with .empty")
+		EndIf
 	EndIf
 
 	$ParserOutDir = ""
@@ -907,20 +955,22 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 			ConsoleWrite("Output fragment verified and written to: " & $ParserOutDir & "\" & $OutFragmentName & @CRLF)
 		EndIf
 	EndIf
-	If Not $CleanUp Then FileWriteLine($IndxEntriesCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & 1 & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
+	If Not $CleanUp Then FileWriteLine($IndxEntriesI30CsvFile, $RecordOffset & $de & $IndxLastLsn & $de & 1 & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
 	Return 1
 EndFunc
 
 Func _WriteCSVHeaderIndxEntries()
 	$Indx_Csv_Header = "Offset"&$de&"LastLsn"&$de&"FromIndxSlack"&$de&"FileName"&$de&"MFTReference"&$de&"MFTReferenceSeqNo"&$de&"IndexFlags"&$de&"MFTParentReference"&$de&"MFTParentReferenceSeqNo"&$de&"CTime"&$de&"ATime"&$de&"MTime"&$de&"RTime"&$de&"AllocSize"&$de&"RealSize"&$de&"FileFlags"&$de&"ReparseTag"&$de&"EaSize"&$de&"NameSpace"&$de&"SubNodeVCN"&$de&"CorruptEntries"
-	FileWriteLine($IndxEntriesCsvFile, $Indx_Csv_Header & @CRLF)
+	FileWriteLine($IndxEntriesI30CsvFile, $Indx_Csv_Header & @CRLF)
 EndFunc
 
 Func _ParseCoreValidData($InputData,$FirstEntryOffset)
-	Local $LocalOffset = 1, $SubNodeVCN
+	Local $LocalOffset = 1, $SubNodeVCN, $EntryCounter=0
 	$TextInformation=""
+	$IndxLastLsn = -1
 ;	ConsoleWrite("_ParseCoreData():" & @crlf)
 ;	ConsoleWrite(_HexEncode("0x"&$InputData) & @crlf)
+	$SizeofIndxRecord = StringLen($InputData)
 	While 1
 		$RecordOffset = "0x" & Hex(Int($CurrentFileOffset + (($LocalOffset-1)/2) + $FirstEntryOffset))
 		$MFTReference = StringMid($InputData,$LocalOffset,12)
@@ -1054,28 +1104,36 @@ Func _ParseCoreValidData($InputData,$FirstEntryOffset)
 		$Indx_FileName = StringMid($InputData,$LocalOffset+164,$Indx_NameLength*4)
 		$Indx_FileName = BinaryToString("0x"&$Indx_FileName,2)
 
-		If $LocalOffset >= StringLen($InputData) Then ExitLoop
+		If $LocalOffset > 180 And $EntryCounter = 0 Then
+			;This INDX is most likely not $I30.
+			Return 0
+		EndIf
+
+		If $LocalOffset >= $SizeofIndxRecord Then
+			Return $EntryCounter
+		EndIf
 
 		If $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal Then
-			FileWriteLine($IndxEntriesCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
+			FileWriteLine($IndxEntriesI30CsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
 			$LocalOffset += $IndexEntryLength*2
 			$EntryCounter+=1
 			_ClearVar()
 			ContinueLoop
 		Else
 ;			ConsoleWrite("Error: Validation of entry failed." & @CRLF)
-			Return 0
+			Return $EntryCounter
 		EndIf
 		_ClearVar()
 	WEnd
 EndFunc
 
 Func _ParseCoreSlackSpace($InputData,$SkeewedOffset)
-	Local $LocalOffset = 1, $SubNodeVCN
+	Local $LocalOffset = 1, $SubNodeVCN, $EntryCounter=0
 	$TextInformation=""
 	$IndxLastLsn = -1
 ;	ConsoleWrite("_ParseCoreSlackSpace():" & @crlf)
 ;	ConsoleWrite(_HexEncode("0x"&$InputData) & @crlf)
+	$SizeofIndxRecord = StringLen($InputData)
 	While 1
 		$FileNameHealthy=0
 		$RecordOffset = "0x" & Hex(Int($CurrentFileOffset + (($SkeewedOffset+$LocalOffset-1)/2)))
@@ -1221,8 +1279,16 @@ Func _ParseCoreSlackSpace($InputData,$SkeewedOffset)
 ;			ConsoleWrite("$Indx_FileNameHex: " & $Indx_FileNameHex & @CRLF)
 ;			ConsoleWrite("$Indx_FileName: " & $Indx_FileName & @CRLF)
 		EndIf
-		If $LocalOffset >= StringLen($InputData) Then ExitLoop
 
+		If $LocalOffset >= $SizeofIndxRecord Then
+			Return $EntryCounter
+		EndIf
+
+		If $LocalOffset > 800 And $EntryCounter = 0 Then
+			;This INDX is most likely not $I30.
+			Return 0
+		EndIf
+		#cs
 		$OffsetToFileName_tmp = $OffsetToFileName
 		If Mod($OffsetToFileName_tmp,8) Then
 			While 1
@@ -1230,7 +1296,7 @@ Func _ParseCoreSlackSpace($InputData,$SkeewedOffset)
 				If Mod($OffsetToFileName_tmp,8) = 0 Then ExitLoop
 			WEnd
 		EndIf
-
+		#ce
 		If $FileNameHealthy And $Indx_NameLength > 0 And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal And $Indx_NameSpace <> "Unknown" And $Indx_ReparseTag <> "UNKNOWN" And $Indx_AllocSize >= $Indx_RealSize And Mod($Indx_AllocSize,8)=0 Then
 			If $MFTReferenceSeqNo = 0 Then $TextInformation &= ";MftRef;MftRefSeqNo"
 			If $IndexFlags > 2 Then $TextInformation &= ";IndexFlags"
@@ -1238,7 +1304,7 @@ Func _ParseCoreSlackSpace($InputData,$SkeewedOffset)
 			If $MFTReferenceOfParentSeqNo = 0 Then $TextInformation &= ";MFTReferenceOfParent;MFTReferenceOfParentSeqNo"
 			If ($DoReparseTag And StringInStr($Indx_ReparseTag,"UNKNOWN")) Then $TextInformation &= ";ReparseTag"
 			If ($DoEaSize And $Indx_EaSize < 8) Then $TextInformation &= ";EaSize"
-			FileWriteLine($IndxEntriesCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
+			FileWriteLine($IndxEntriesI30CsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
 			If $IndexEntryLength = 0 Then $IndexEntryLength = (32+26+$Indx_NameLength)*2
 			$LocalOffset += $IndexEntryLength*2
 			$EntryCounter+=1
@@ -1261,7 +1327,8 @@ Func _ParseCoreSlackSpace($InputData,$SkeewedOffset)
 EndFunc
 
 Func _ParseIndx($InputData)
-	$LocalOffset = 3
+	Local $IndxValidationTest=0, $LocalOffset = 3
+
 	$IndxHdrMagic = StringMid($InputData,$LocalOffset,8)
 	If $IndxHdrMagic <> $INDXsig Then Return 0
 	If $DoFixups Then
@@ -1306,24 +1373,40 @@ Func _ParseIndx($InputData)
 		ConsoleWrite("Error in $IsNotLeafNode" & @crlf)
 		Return 0
 	EndIf
-
+	Local $DetectedEntries = 0
 	If Not ((24+$IndxHeaderSize) >= ($IndxRealSizeAllEntries+8)) Then
 		$FromIndxSlack = 0
-		_ParseCoreValidData(StringMid($InputData,$LocalOffset+48+($IndxHeaderSize*2),($IndxRealSizeAllEntries+8)*2),24+$IndxHeaderSize)
-		If $DoParseSlack Then
+		;First try normal $I30
+		$IndxValidationTest = _ParseCoreValidData(StringMid($InputData,$LocalOffset+48+($IndxHeaderSize*2),($IndxRealSizeAllEntries+8)*2),24+$IndxHeaderSize)
+		If $IndxValidationTest Then
 			$FromIndxSlack = 1
-			_ParseCoreSlackSpace(StringMid($InputData,$LocalOffset+($IndxRealSizeAllEntries+8)*2),($IndxRealSizeAllEntries+8)*2)
+			$DetectedEntries += $IndxValidationTest
+			$IndxValidationTest = _ParseCoreSlackSpace(StringMid($InputData,$LocalOffset+($IndxRealSizeAllEntries+8)*2),($IndxRealSizeAllEntries+8)*2)
+			$DetectedEntries += $IndxValidationTest
+		Else
+			;Failure for $I30, so we attempt $ObjId:$O
+			$IndxValidationTest = _DecodeIndxContentObjIdO(StringMid($InputData,$LocalOffset+48+($IndxHeaderSize*2),($IndxRealSizeAllEntries+8)*2),24+$IndxHeaderSize)
+			If $IndxValidationTest Then
+				;If success then try slack for $ObjId:$O
+				$FromIndxSlack = 1
+				$DetectedEntries += $IndxValidationTest
+				$IndxValidationTest = _DecodeSlackIndxContentObjIdO(StringMid($InputData,$LocalOffset+($IndxRealSizeAllEntries+8)*2),($IndxRealSizeAllEntries+8)*2)
+				$DetectedEntries += $IndxValidationTest
+			EndIf
 		EndIf
 	Else
-;		ConsoleWrite("24+$IndxHeaderSize: " & 24+$IndxHeaderSize & @crlf)
-;		ConsoleWrite("$IndxRealSizeAllEntries+8: " & $IndxRealSizeAllEntries+8 & @crlf)
-;		ConsoleWrite("Warning: No valid data in this INDX" & @crlf)
-		If $DoParseSlack Then
-			$FromIndxSlack = 1
-			_ParseCoreSlackSpace(StringMid($InputData,$LocalOffset+($IndxRealSizeAllEntries+8)*2),($IndxRealSizeAllEntries+8)*2)
+		;INDX header indicated all content was slack
+		$FromIndxSlack = 1
+		;First try $I30
+		$IndxValidationTest = _ParseCoreSlackSpace(StringMid($InputData,$LocalOffset+($IndxRealSizeAllEntries+8)*2),($IndxRealSizeAllEntries+8)*2)
+		If Not $IndxValidationTest Then
+			;Failure for $I30, so awe attempt $ObjId:$O
+			$DetectedEntries += $IndxValidationTest
+			$IndxValidationTest = _DecodeSlackIndxContentObjIdO(StringMid($InputData,$LocalOffset+($IndxRealSizeAllEntries+8)*2),($IndxRealSizeAllEntries+8)*2)
+			$DetectedEntries += $IndxValidationTest
 		EndIf
 	EndIf
-
+	Return $DetectedEntries
 EndFunc
 
 Func _ApplyFixupsIndx($Entry)
@@ -2092,4 +2175,340 @@ Func _InjectScanMode()
 		"14|" & _
 		"15|"
 	GUICtrlSetData($ComboScanMode,$ScanModes,"0")
+EndFunc
+
+Func _DecodeIndxContentObjIdO($InputData,$FirstEntryOffset)
+	Local $Indx_DataOffset, $Indx_DataSize, $Indx_Padding1, $Indx_IndexEntrySize, $Indx_IndexKeySize, $Indx_Flags, $Indx_Padding2, $Indx_GUIDObjectId, $Indx_MftRef, $Indx_MftRefSeqNo
+	Local $Indx_GUIDBirthVolumeId, $Indx_GUIDBirthObjectId, $Indx_GUIDDomainId, $EntryCounter=0, $LocalOffset=1, $TextInformation
+
+	;ConsoleWrite("_DecodeIndxContentObjIdO():" & @crlf)
+	;ConsoleWrite(_HexEncode("0x"&$InputData) & @crlf)
+	$SizeofIndxRecord = StringLen($InputData)
+	While 1
+		;$RecordOffset = "0x" & Hex(Int($SourceFileOffset + (($LocalOffset-1)/2) + $FirstEntryOffset))
+		$RecordOffset = "0x" & Hex(Int($CurrentFileOffset + (($LocalOffset-1)/2) + $FirstEntryOffset))
+
+		$Indx_DataOffset = StringMid($InputData, $LocalOffset, 4)
+		$Indx_DataOffset = Dec(_SwapEndian($Indx_DataOffset),2)
+
+		$Indx_DataSize = StringMid($InputData, $LocalOffset + 4, 4)
+		$Indx_DataSize = Dec(_SwapEndian($Indx_DataSize),2)
+
+		If $Indx_DataOffset = 0 Or $Indx_DataSize = 0 Then
+			ConsoleWrite("Error: Invalid DataOffset or DataSize" & @crlf)
+			;ConsoleWrite(_HexEncode("0x"&StringMid($InputData, $LocalOffset)) & @crlf)
+			Return $EntryCounter
+		EndIf
+
+		;Padding 4 bytes
+		$Indx_Padding1 = StringMid($InputData, $LocalOffset + 8, 8)
+		$Indx_Padding1 = Dec(_SwapEndian($Indx_Padding1),2)
+		If $Indx_Padding1 <> 0 Then
+			ConsoleWrite("Error: Invalid Padding1" & @crlf)
+			Return 0
+		EndIf
+
+		$Indx_IndexEntrySize = StringMid($InputData, $LocalOffset + 16, 4)
+		$Indx_IndexEntrySize = Dec(_SwapEndian($Indx_IndexEntrySize),2)
+		If $Indx_IndexEntrySize = 0 Then
+			ConsoleWrite("Error: Invalid IndexEntrySize" & @crlf)
+			Return 0
+		EndIf
+
+		$Indx_IndexKeySize = StringMid($InputData, $LocalOffset + 20, 4)
+		$Indx_IndexKeySize = Dec(_SwapEndian($Indx_IndexKeySize),2)
+
+		;1=Entry has subnodes, 2=Last entry
+		$Indx_Flags = StringMid($InputData, $LocalOffset + 24, 4)
+		If Dec(_SwapEndian($Indx_Flags),2) > 2 Then
+			ConsoleWrite("Error: Invalid Flags" & @crlf)
+			Return 0
+		EndIf
+		$Indx_Flags = "0x" & _SwapEndian($Indx_Flags)
+
+		;Padding 2 bytes
+		$Indx_Padding2 = StringMid($InputData, $LocalOffset + 28, 4)
+		$Indx_Padding2 = Dec(_SwapEndian($Indx_Padding2),2)
+		If $Indx_Padding2 <> 0 Then
+			ConsoleWrite("Error: Invalid Padding2" & @crlf)
+			Return 0
+		EndIf
+
+		$Indx_GUIDObjectId = StringMid($InputData, $LocalOffset + 32, 32)
+		If $Indx_GUIDObjectId = "00000000000000000000000000000000" Then
+			ConsoleWrite("Error: Invalid GUIDObjectId" & @crlf)
+			Return 0
+		EndIf
+
+		;Decode guid
+		$Indx_GUIDObjectId_Version = Dec(StringMid($Indx_GUIDObjectId,15,1))
+		$Indx_GUIDObjectId_Timestamp = StringMid($Indx_GUIDObjectId,1,14) & "0" & StringMid($Indx_GUIDObjectId,16,1)
+		$Indx_GUIDObjectId_TimestampDec = Dec(_SwapEndian($Indx_GUIDObjectId_Timestamp),2)
+		$Indx_GUIDObjectId_Timestamp = _DecodeTimestampFromGuid($Indx_GUIDObjectId_Timestamp)
+		$Indx_GUIDObjectId_ClockSeq = StringMid($Indx_GUIDObjectId,17,4)
+		$Indx_GUIDObjectId_ClockSeq = Dec($Indx_GUIDObjectId_ClockSeq)
+		$Indx_GUIDObjectId_Node = StringMid($Indx_GUIDObjectId,21,12)
+		$Indx_GUIDObjectId_Node = _DecodeMacFromGuid($Indx_GUIDObjectId_Node)
+		$Indx_GUIDObjectId = _HexToGuidStr($Indx_GUIDObjectId,1)
+
+		$Indx_MftRef = StringMid($InputData, $LocalOffset + 64, 12)
+		$Indx_MftRef = Dec(_SwapEndian($Indx_MftRef),2)
+		If $Indx_MftRef = 0 Then
+			ConsoleWrite("Error: Invalid MftRef" & @crlf)
+			Return 0
+		EndIf
+
+		$Indx_MftRefSeqNo = StringMid($InputData, $LocalOffset + 76, 4)
+		$Indx_MftRefSeqNo = Dec(_SwapEndian($Indx_MftRefSeqNo),2)
+		If $Indx_MftRefSeqNo = 0 Then
+			ConsoleWrite("Error: Invalid MftRefSeqNo" & @crlf)
+			Return 0
+		EndIf
+
+		$Indx_GUIDBirthVolumeId = StringMid($InputData, $LocalOffset + 80, 32)
+		;Decode guid
+		$Indx_GUIDBirthVolumeId_Version = Dec(StringMid($Indx_GUIDBirthVolumeId,15,1))
+		$Indx_GUIDBirthVolumeId_Timestamp = StringMid($Indx_GUIDBirthVolumeId,1,14) & "0" & StringMid($Indx_GUIDBirthVolumeId,16,1)
+		$Indx_GUIDBirthVolumeId_TimestampDec = Dec(_SwapEndian($Indx_GUIDBirthVolumeId_Timestamp),2)
+		$Indx_GUIDBirthVolumeId_Timestamp = _DecodeTimestampFromGuid($Indx_GUIDBirthVolumeId_Timestamp)
+		$Indx_GUIDBirthVolumeId_ClockSeq = StringMid($Indx_GUIDBirthVolumeId,17,4)
+		$Indx_GUIDBirthVolumeId_ClockSeq = Dec($Indx_GUIDBirthVolumeId_ClockSeq)
+		$Indx_GUIDBirthVolumeId_Node = StringMid($Indx_GUIDBirthVolumeId,21,12)
+		$Indx_GUIDBirthVolumeId_Node = _DecodeMacFromGuid($Indx_GUIDBirthVolumeId_Node)
+		$Indx_GUIDBirthVolumeId = _HexToGuidStr($Indx_GUIDBirthVolumeId,1)
+
+		$Indx_GUIDBirthObjectId = StringMid($InputData, $LocalOffset + 112, 32)
+		;Decode guid
+		$Indx_GUIDBirthObjectId_Version = Dec(StringMid($Indx_GUIDBirthObjectId,15,1))
+		$Indx_GUIDBirthObjectId_Timestamp = StringMid($Indx_GUIDBirthObjectId,1,14) & "0" & StringMid($Indx_GUIDBirthObjectId,16,1)
+		$Indx_GUIDBirthObjectId_TimestampDec = Dec(_SwapEndian($Indx_GUIDBirthObjectId_Timestamp),2)
+		$Indx_GUIDBirthObjectId_Timestamp = _DecodeTimestampFromGuid($Indx_GUIDBirthObjectId_Timestamp)
+		$Indx_GUIDBirthObjectId_ClockSeq = StringMid($Indx_GUIDBirthObjectId,17,4)
+		$Indx_GUIDBirthObjectId_ClockSeq = Dec($Indx_GUIDBirthObjectId_ClockSeq)
+		$Indx_GUIDBirthObjectId_Node = StringMid($Indx_GUIDBirthObjectId,21,12)
+		$Indx_GUIDBirthObjectId_Node = _DecodeMacFromGuid($Indx_GUIDBirthObjectId_Node)
+		$Indx_GUIDBirthObjectId = _HexToGuidStr($Indx_GUIDBirthObjectId,1)
+
+		$Indx_GUIDDomainId = StringMid($InputData, $LocalOffset + 144, 32)
+		;Decode guid
+		$Indx_GUIDDomainId_Version = Dec(StringMid($Indx_GUIDDomainId,15,1))
+		$Indx_GUIDDomainId_Timestamp = StringMid($Indx_GUIDDomainId,1,14) & "0" & StringMid($Indx_GUIDDomainId,16,1)
+		$Indx_GUIDDomainId_TimestampDec = Dec(_SwapEndian($Indx_GUIDDomainId_Timestamp),2)
+		$Indx_GUIDDomainId_Timestamp = _DecodeTimestampFromGuid($Indx_GUIDDomainId_Timestamp)
+		$Indx_GUIDDomainId_ClockSeq = StringMid($Indx_GUIDDomainId,17,4)
+		$Indx_GUIDDomainId_ClockSeq = Dec($Indx_GUIDDomainId_ClockSeq)
+		$Indx_GUIDDomainId_Node = StringMid($Indx_GUIDDomainId,21,12)
+		$Indx_GUIDDomainId_Node = _DecodeMacFromGuid($Indx_GUIDDomainId_Node)
+		$Indx_GUIDDomainId = _HexToGuidStr($Indx_GUIDDomainId,1)
+
+		;FileWriteLine($IndxEntriesObjIdOCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_DataOffset & $de & $Indx_DataSize & $de & $Indx_Padding1 & $de & $Indx_IndexEntrySize & $de & $Indx_IndexKeySize & $de & $Indx_Flags & $de & $Indx_Padding2 & $de & $Indx_GUIDObjectId & $de & $Indx_MftRef & $de & $Indx_MftRefSeqNo & $de & $Indx_GUIDBirthVolumeId & $de & $Indx_GUIDBirthObjectId & $de & $Indx_GUIDDomainId & $de & $Indx_GUIDObjectId_Version & $de & $Indx_GUIDObjectId_Timestamp & $de & $Indx_GUIDObjectId_TimestampDec & $de & $Indx_GUIDObjectId_ClockSeq & $de & $Indx_GUIDObjectId_Node & $de & $Indx_GUIDBirthVolumeId_Version & $de & $Indx_GUIDBirthVolumeId_Timestamp & $de & $Indx_GUIDBirthVolumeId_TimestampDec & $de & $Indx_GUIDBirthVolumeId_ClockSeq & $de & $Indx_GUIDBirthVolumeId_Node & $de & $Indx_GUIDBirthObjectId_Version & $de & $Indx_GUIDBirthObjectId_Timestamp & $de & $Indx_GUIDBirthObjectId_TimestampDec & $de & $Indx_GUIDBirthObjectId_ClockSeq & $de & $Indx_GUIDBirthObjectId_Node & $de & $Indx_GUIDDomainId_Version & $de & $Indx_GUIDDomainId_Timestamp & $de & $Indx_GUIDDomainId_TimestampDec & $de & $Indx_GUIDDomainId_ClockSeq & $de & $Indx_GUIDDomainId_Node & $de & $TextInformation & @crlf)
+		FileWriteLine($IndxEntriesObjIdOCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_DataOffset & $de & $Indx_DataSize & $de & $Indx_Padding1 & $de & $Indx_IndexEntrySize & $de & $Indx_IndexKeySize & $de & $Indx_Flags & $de & $Indx_Padding2 & $de & $Indx_MftRef & $de & $Indx_MftRefSeqNo & $de & $Indx_GUIDObjectId & $de & $Indx_GUIDObjectId_Version & $de & $Indx_GUIDObjectId_Timestamp & $de & $Indx_GUIDObjectId_TimestampDec & $de & $Indx_GUIDObjectId_ClockSeq & $de & $Indx_GUIDObjectId_Node & $de & $Indx_GUIDBirthVolumeId & $de & $Indx_GUIDBirthVolumeId_Version & $de & $Indx_GUIDBirthVolumeId_Timestamp & $de & $Indx_GUIDBirthVolumeId_TimestampDec & $de & $Indx_GUIDBirthVolumeId_ClockSeq & $de & $Indx_GUIDBirthVolumeId_Node & $de & $Indx_GUIDBirthObjectId & $de & $Indx_GUIDBirthObjectId_Version & $de & $Indx_GUIDBirthObjectId_Timestamp & $de & $Indx_GUIDBirthObjectId_TimestampDec & $de & $Indx_GUIDBirthObjectId_ClockSeq & $de & $Indx_GUIDBirthObjectId_Node & $de & $Indx_GUIDDomainId & $de & $Indx_GUIDDomainId_Version & $de & $Indx_GUIDDomainId_Timestamp & $de & $Indx_GUIDDomainId_TimestampDec & $de & $Indx_GUIDDomainId_ClockSeq & $de & $Indx_GUIDDomainId_Node & $de & $TextInformation & @crlf)
+		$EntryCounter += 1
+		$LocalOffset += 176
+		If $LocalOffset >= $SizeofIndxRecord Then
+			Return $EntryCounter
+		EndIf
+	WEnd
+	Return 1
+EndFunc
+
+Func _DecodeSlackIndxContentObjIdO($InputData,$FirstEntryOffset)
+	Local $Indx_DataOffset, $Indx_DataSize, $Indx_Padding1, $Indx_IndexEntrySize, $Indx_IndexKeySize, $Indx_Flags, $Indx_Padding2, $Indx_GUIDObjectId, $Indx_MftRef, $Indx_MftRefSeqNo
+	Local $Indx_GUIDBirthVolumeId, $Indx_GUIDBirthObjectId, $Indx_GUIDDomainId, $EntryCounter=0, $LocalOffset=1, $TextInformation, $NullGuid = "{00000000-0000-0000-0000-000000000000}"
+	Local $IndxLastLsn = -1, $RegExPatternHexNotFourNulls = "[0]{4}", $GuidProbablyBad=0
+
+	;ConsoleWrite("_DecodeSlackIndxContentObjIdO():" & @crlf)
+	;ConsoleWrite(_HexEncode("0x"&$InputData) & @crlf)
+	$SizeofIndxRecord = StringLen($InputData)
+	While 1
+		$TextInformation = ""
+		$GuidProbablyBad = 0
+
+		If $LocalOffset + 176 >= $SizeofIndxRecord Then
+			Return $EntryCounter
+		EndIf
+
+		;$RecordOffset = "0x" & Hex(Int($SourceFileOffset + (($LocalOffset-1)/2) + $FirstEntryOffset))
+		$RecordOffset = "0x" & Hex(Int($CurrentFileOffset + (($LocalOffset-1)/2) + $FirstEntryOffset))
+
+		$Indx_DataOffset = StringMid($InputData, $LocalOffset, 4)
+		$Indx_DataOffset = Dec(_SwapEndian($Indx_DataOffset),2)
+
+		$Indx_DataSize = StringMid($InputData, $LocalOffset + 4, 4)
+		$Indx_DataSize = Dec(_SwapEndian($Indx_DataSize),2)
+
+;		If $Indx_DataOffset = 0 Or $Indx_DataSize = 0 Then
+;			ConsoleWrite("Error: Invalid DataOffset or DataSize" & @crlf)
+			;ConsoleWrite(_HexEncode("0x"&StringMid($InputData, $LocalOffset)) & @crlf)
+;			Return $EntryCounter
+;		EndIf
+
+		;Padding 4 bytes
+		$Indx_Padding1 = StringMid($InputData, $LocalOffset + 8, 8)
+		$Indx_Padding1 = Dec(_SwapEndian($Indx_Padding1),2)
+;		If $Indx_Padding1 <> 0 Then
+;			ConsoleWrite("Error: Invalid Padding1" & @crlf)
+;			Return 0
+;		EndIf
+
+		$Indx_IndexEntrySize = StringMid($InputData, $LocalOffset + 16, 4)
+		$Indx_IndexEntrySize = Dec(_SwapEndian($Indx_IndexEntrySize),2)
+;		If $Indx_IndexEntrySize = 0 Then
+;			ConsoleWrite("Error: Invalid IndexEntrySize" & @crlf)
+;			Return 0
+;		EndIf
+
+		$Indx_IndexKeySize = StringMid($InputData, $LocalOffset + 20, 4)
+		$Indx_IndexKeySize = Dec(_SwapEndian($Indx_IndexKeySize),2)
+
+		;1=Entry has subnodes, 2=Last entry
+		$Indx_Flags = StringMid($InputData, $LocalOffset + 24, 4)
+		$Indx_Flags = "0x" & _SwapEndian($Indx_Flags)
+;		If $Indx_Flags > 0x0002 Then
+;			ConsoleWrite("Error: Invalid Flags" & @crlf)
+;			Return 0
+;		EndIf
+
+
+		;Padding 2 bytes
+		$Indx_Padding2 = StringMid($InputData, $LocalOffset + 28, 4)
+		$Indx_Padding2 = Dec(_SwapEndian($Indx_Padding2),2)
+;		If $Indx_Padding2 <> 0 Then
+;			ConsoleWrite("Error: Invalid Padding2" & @crlf)
+;			Return 0
+;		EndIf
+
+		$Indx_GUIDObjectId = StringMid($InputData, $LocalOffset + 32, 32)
+;		If $Indx_GUIDObjectId = "00000000000000000000000000000000" Then
+;			ConsoleWrite("Error: Invalid GUIDObjectId" & @crlf)
+;			Return 0
+;		EndIf
+		If StringRegExp($Indx_GUIDObjectId,$RegExPatternHexNotFourNulls) Then
+			$GuidProbablyBad = 1
+		Else
+			$GuidProbablyBad = 0
+		EndIf
+		;Decode guid
+		$Indx_GUIDObjectId_Version = Dec(StringMid($Indx_GUIDObjectId,15,1))
+		$Indx_GUIDObjectId_Timestamp = StringMid($Indx_GUIDObjectId,1,14) & "0" & StringMid($Indx_GUIDObjectId,16,1)
+		$Indx_GUIDObjectId_TimestampDec = Dec(_SwapEndian($Indx_GUIDObjectId_Timestamp),2)
+		$Indx_GUIDObjectId_Timestamp = _DecodeTimestampFromGuid($Indx_GUIDObjectId_Timestamp)
+		$Indx_GUIDObjectId_ClockSeq = StringMid($Indx_GUIDObjectId,17,4)
+		$Indx_GUIDObjectId_ClockSeq = Dec($Indx_GUIDObjectId_ClockSeq)
+		$Indx_GUIDObjectId_Node = StringMid($Indx_GUIDObjectId,21,12)
+		$Indx_GUIDObjectId_Node = _DecodeMacFromGuid($Indx_GUIDObjectId_Node)
+		$Indx_GUIDObjectId = _HexToGuidStr($Indx_GUIDObjectId,1)
+
+		$Indx_MftRef = StringMid($InputData, $LocalOffset + 64, 12)
+		$Indx_MftRef = Dec(_SwapEndian($Indx_MftRef),2)
+;		If $Indx_MftRef = 0 Then
+;			ConsoleWrite("Error: Invalid MftRef" & @crlf)
+;			Return 0
+;		EndIf
+
+		$Indx_MftRefSeqNo = StringMid($InputData, $LocalOffset + 76, 4)
+		$Indx_MftRefSeqNo = Dec(_SwapEndian($Indx_MftRefSeqNo),2)
+;		If $Indx_MftRefSeqNo = 0 Then
+;			ConsoleWrite("Error: Invalid MftRefSeqNo" & @crlf)
+;			Return 0
+;		EndIf
+
+		$Indx_GUIDBirthVolumeId = StringMid($InputData, $LocalOffset + 80, 32)
+		;Decode guid
+		$Indx_GUIDBirthVolumeId_Version = Dec(StringMid($Indx_GUIDBirthVolumeId,15,1))
+		$Indx_GUIDBirthVolumeId_Timestamp = StringMid($Indx_GUIDBirthVolumeId,1,14) & "0" & StringMid($Indx_GUIDBirthVolumeId,16,1)
+		$Indx_GUIDBirthVolumeId_TimestampDec = Dec(_SwapEndian($Indx_GUIDBirthVolumeId_Timestamp),2)
+		$Indx_GUIDBirthVolumeId_Timestamp = _DecodeTimestampFromGuid($Indx_GUIDBirthVolumeId_Timestamp)
+		$Indx_GUIDBirthVolumeId_ClockSeq = StringMid($Indx_GUIDBirthVolumeId,17,4)
+		$Indx_GUIDBirthVolumeId_ClockSeq = Dec($Indx_GUIDBirthVolumeId_ClockSeq)
+		$Indx_GUIDBirthVolumeId_Node = StringMid($Indx_GUIDBirthVolumeId,21,12)
+		$Indx_GUIDBirthVolumeId_Node = _DecodeMacFromGuid($Indx_GUIDBirthVolumeId_Node)
+		$Indx_GUIDBirthVolumeId = _HexToGuidStr($Indx_GUIDBirthVolumeId,1)
+
+		$Indx_GUIDBirthObjectId = StringMid($InputData, $LocalOffset + 112, 32)
+		;Decode guid
+		$Indx_GUIDBirthObjectId_Version = Dec(StringMid($Indx_GUIDBirthObjectId,15,1))
+		$Indx_GUIDBirthObjectId_Timestamp = StringMid($Indx_GUIDBirthObjectId,1,14) & "0" & StringMid($Indx_GUIDBirthObjectId,16,1)
+		$Indx_GUIDBirthObjectId_TimestampDec = Dec(_SwapEndian($Indx_GUIDBirthObjectId_Timestamp),2)
+		$Indx_GUIDBirthObjectId_Timestamp = _DecodeTimestampFromGuid($Indx_GUIDBirthObjectId_Timestamp)
+		$Indx_GUIDBirthObjectId_ClockSeq = StringMid($Indx_GUIDBirthObjectId,17,4)
+		$Indx_GUIDBirthObjectId_ClockSeq = Dec($Indx_GUIDBirthObjectId_ClockSeq)
+		$Indx_GUIDBirthObjectId_Node = StringMid($Indx_GUIDBirthObjectId,21,12)
+		$Indx_GUIDBirthObjectId_Node = _DecodeMacFromGuid($Indx_GUIDBirthObjectId_Node)
+		$Indx_GUIDBirthObjectId = _HexToGuidStr($Indx_GUIDBirthObjectId,1)
+
+		$Indx_GUIDDomainId = StringMid($InputData, $LocalOffset + 144, 32)
+		;Decode guid
+		$Indx_GUIDDomainId_Version = Dec(StringMid($Indx_GUIDDomainId,15,1))
+		$Indx_GUIDDomainId_Timestamp = StringMid($Indx_GUIDDomainId,1,14) & "0" & StringMid($Indx_GUIDDomainId,16,1)
+		$Indx_GUIDDomainId_TimestampDec = Dec(_SwapEndian($Indx_GUIDDomainId_Timestamp),2)
+		$Indx_GUIDDomainId_Timestamp = _DecodeTimestampFromGuid($Indx_GUIDDomainId_Timestamp)
+		$Indx_GUIDDomainId_ClockSeq = StringMid($Indx_GUIDDomainId,17,4)
+		$Indx_GUIDDomainId_ClockSeq = Dec($Indx_GUIDDomainId_ClockSeq)
+		$Indx_GUIDDomainId_Node = StringMid($Indx_GUIDDomainId,21,12)
+		$Indx_GUIDDomainId_Node = _DecodeMacFromGuid($Indx_GUIDDomainId_Node)
+		$Indx_GUIDDomainId = _HexToGuidStr($Indx_GUIDDomainId,1)
+
+		If $LocalOffset > 352 And $EntryCounter = 0 Then
+			;This INDX is most likely not $O.
+			Return 0
+		EndIf
+
+		If $LocalOffset >= $SizeofIndxRecord Then
+			Return $EntryCounter
+		EndIf
+
+		If Mod($Indx_DataOffset,8) = 0 And $Indx_DataOffset < 64 And Mod($Indx_DataSize,8) = 0 And $Indx_DataSize < 128 And $Indx_Padding1 = 0 And Mod($Indx_IndexEntrySize,8) = 0 And $Indx_IndexEntrySize < 128 And Mod($Indx_IndexKeySize,16) = 0 And $Indx_IndexKeySize < 17 And $Indx_Flags < 0x0003 And $Indx_Padding2 = 0 And $Indx_GUIDObjectId <> $NullGuid And $GuidProbablyBad = 0 And $Indx_MftRef > 0 And $Indx_MftRefSeqNo > 0 Then
+			;If $Indx_DataOffset = 0 Then $TextInformation &= ";DataOffset"
+			;If $Indx_DataSize = 0 Then $TextInformation &= ";DataSize"
+			;If $Indx_Padding1 > 0 Then $TextInformation &= ";Padding1"
+			;If $Indx_IndexEntrySize = 0 Then $TextInformation &= ";IndexEntrySize"
+			;If $Indx_IndexKeySize = 0 Then $TextInformation &= ";IndexKeySize"
+			FileWriteLine($IndxEntriesObjIdOCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_DataOffset & $de & $Indx_DataSize & $de & $Indx_Padding1 & $de & $Indx_IndexEntrySize & $de & $Indx_IndexKeySize & $de & $Indx_Flags & $de & $Indx_Padding2 & $de & $Indx_MftRef & $de & $Indx_MftRefSeqNo & $de & $Indx_GUIDObjectId & $de & $Indx_GUIDObjectId_Version & $de & $Indx_GUIDObjectId_Timestamp & $de & $Indx_GUIDObjectId_TimestampDec & $de & $Indx_GUIDObjectId_ClockSeq & $de & $Indx_GUIDObjectId_Node & $de & $Indx_GUIDBirthVolumeId & $de & $Indx_GUIDBirthVolumeId_Version & $de & $Indx_GUIDBirthVolumeId_Timestamp & $de & $Indx_GUIDBirthVolumeId_TimestampDec & $de & $Indx_GUIDBirthVolumeId_ClockSeq & $de & $Indx_GUIDBirthVolumeId_Node & $de & $Indx_GUIDBirthObjectId & $de & $Indx_GUIDBirthObjectId_Version & $de & $Indx_GUIDBirthObjectId_Timestamp & $de & $Indx_GUIDBirthObjectId_TimestampDec & $de & $Indx_GUIDBirthObjectId_ClockSeq & $de & $Indx_GUIDBirthObjectId_Node & $de & $Indx_GUIDDomainId & $de & $Indx_GUIDDomainId_Version & $de & $Indx_GUIDDomainId_Timestamp & $de & $Indx_GUIDDomainId_TimestampDec & $de & $Indx_GUIDDomainId_ClockSeq & $de & $Indx_GUIDDomainId_Node & $de & $TextInformation & @crlf)
+			$EntryCounter += 1
+			;We can jump by fixed size since all entries in this index are of fixed size. In $I30 this is different because filename length varies.
+			$LocalOffset += 176
+		Else
+			$LocalOffset += 2
+		EndIf
+
+	WEnd
+	Return 1
+EndFunc
+
+Func _HexToGuidStr($input,$mode)
+	;{4b-2b-2b-2b-6b}
+	Local $OutStr
+	If Not StringLen($input) = 32 Then Return $input
+	If $mode Then $OutStr = "{"
+	$OutStr &= _SwapEndian(StringMid($input,1,8)) & "-"
+	$OutStr &= _SwapEndian(StringMid($input,9,4)) & "-"
+	$OutStr &= _SwapEndian(StringMid($input,13,4)) & "-"
+	$OutStr &= StringMid($input,17,4) & "-"
+	$OutStr &= StringMid($input,21,12)
+	If $mode Then $OutStr &= "}"
+	Return $OutStr
+EndFunc
+
+Func _WriteIndxObjIdOModuleCsvHeader()
+	$Indx_Csv_Header = "Offset"&$de&"LastLsn"&$de&"FromIndxSlack"&$de&"DataOffset"&$de&"DataSize"&$de&"Padding1"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"Padding2"&$de&"MftRef"&$de&"MftRefSeqNo"&$de&"ObjectId"&$de&"ObjectId_Version"&$de&"ObjectId_Timestamp"&$de&"ObjectId_TimestampDec"&$de&"ObjectId_ClockSeq"&$de&"ObjectId_Node"&$de&"BirthVolumeId"&$de&"BirthVolumeId_Version"&$de&"BirthVolumeId_Timestamp"&$de&"BirthVolumeId_TimestampDec"&$de&"BirthVolumeId_ClockSeq"&$de&"BirthVolumeId_Node"&$de&"BirthObjectId"&$de&"BirthObjectId_Version"&$de&"BirthObjectId_Timestamp"&$de&"BirthObjectId_TimestampDec"&$de&"BirthObjectId_ClockSeq"&$de&"BirthObjectId_Node"&$de&"DomainId"&$de&"DomainId_Version"&$de&"DomainId_Timestamp"&$de&"DomainId_TimestampDec"&$de&"DomainId_ClockSeq"&$de&"DomainId_Node"&$de&"TextInformation"
+	FileWriteLine($IndxEntriesObjIdOCsvFile, $Indx_Csv_Header & @CRLF)
+EndFunc
+
+Func _DecodeMacFromGuid($Input)
+	If StringLen($Input) <> 12 Then Return SetError(1)
+	Local $Mac = StringMid($Input,1,2) & "-" & StringMid($Input,3,2) & "-" & StringMid($Input,5,2) & "-" & StringMid($Input,7,2) & "-" & StringMid($Input,9,2) & "-" & StringMid($Input,11,2)
+	Return $Mac
+EndFunc
+
+Func _DecodeTimestampFromGuid($StampDecode)
+	$StampDecode = _SwapEndian($StampDecode)
+	$StampDecode_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $StampDecode)
+	$StampDecode = _WinTime_UTCFileTimeFormat(Dec($StampDecode,2) - $tDelta - $TimeDiff, $DateTimeFormat, $TimestampPrecision)
+	If @error Then
+		$StampDecode = $TimestampErrorVal
+	ElseIf $TimestampPrecision = 3 Then
+		$StampDecode = $StampDecode & $PrecisionSeparator2 & _FillZero(StringRight($StampDecode_tmp, 4))
+	EndIf
+	Return $StampDecode
 EndFunc
