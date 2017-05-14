@@ -1,5 +1,8 @@
 Indx2Csv Changelog
 
+v1.0.0.9
+Moved the import sql files into the new import-sql sub directory so that compilation works with the project as is.
+
 v1.0.0.8
 Fixed some bugs in the cleanup after end of parsing.
 Added support for dumping the decode of $O index (both $INDEX_ALLOCATION and $INDEX_ROOT) for $ObjId to a separate csv. Requires Scan mode = 0.

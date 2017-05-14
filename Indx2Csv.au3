@@ -1,9 +1,10 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Icon=C:\Program Files (x86)\AutoIt3\Icons\au3.ico
+#AutoIt3Wrapper_UseUpx=y
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=Decode INDX records
 #AutoIt3Wrapper_Res_Description=Decode INDX records
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.8
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.9
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 ;Program assumes input file like IndxCarver creates.
@@ -29,7 +30,7 @@ Global $INDXsig = "494E4458", $INDX_Size = 4096, $BinaryFragment, $RegExPatternH
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $TimeDiff = 5748192000000000
 
-$Progversion = "Indx2Csv 1.0.0.8"
+$Progversion = "Indx2Csv 1.0.0.9"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -310,14 +311,14 @@ Func _Main()
 	EndIf
 
 	$IndxI30SqlFile = $ParserOutDir & "\Indx_I30_Entries_" & $TimestampStart & ".sql"
-	FileInstall("C:\temp\import-csv-INDX-I30.sql", $IndxI30SqlFile)
+	FileInstall(".\import-sql\import-csv-INDX-I30.sql", $IndxI30SqlFile)
 	$FixedPath = StringReplace($IndxEntriesI30CsvFile,"\","\\")
 	Sleep(500)
 	_ReplaceStringInFile($IndxI30SqlFile,"__PathToCsv__",$FixedPath)
 	If $TestUnicode = 1 Then _ReplaceStringInFile($IndxI30SqlFile,"latin1", "utf8")
 
 	$IndxObjectIdSqlFile = $OutputPath & "\Indx_ObjIdO_Entries_"&$TimestampStart&".sql"
-	FileInstall("C:\temp\import-csv-indx-objido.sql", $IndxObjectIdSqlFile)
+	FileInstall(".\import-sql\import-csv-INDX-objido.sql", $IndxObjectIdSqlFile)
 	$FixedPath = StringReplace($IndxEntriesObjIdOCsvFile,"\","\\")
 	Sleep(500)
 	_ReplaceStringInFile($IndxObjectIdSqlFile,"__PathToCsv__",$FixedPath)
