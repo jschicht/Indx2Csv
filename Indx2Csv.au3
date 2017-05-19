@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=Decode INDX records
 #AutoIt3Wrapper_Res_Description=Decode INDX records
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.10
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.11
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 ;Program assumes input file like IndxCarver creates.
@@ -30,7 +30,7 @@ Global $INDXsig = "494E4458", $INDX_Size = 4096, $BinaryFragment, $RegExPatternH
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $TimeDiff = 5748192000000000
 
-$Progversion = "Indx2Csv 1.0.0.10"
+$Progversion = "Indx2Csv 1.0.0.11"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -1587,8 +1587,20 @@ Func _GetReparseType($ReparseType)
 			Return 'GLOBAL_REPARSE'
 		Case $ReparseType = '0x8000001B'
 			Return 'APPEXECLINK'
+		Case $ReparseType = '0x8000001E'
+			Return 'HFS'
+		Case $ReparseType = '0x80000020'
+			Return 'UNHANDLED'
+		Case $ReparseType = '0x80000021'
+			Return 'ONEDRIVE'
 		Case $ReparseType = '0x9000001A'
 			Return 'CLOUD'
+		Case $ReparseType = '0x9000101A'
+			Return 'CLOUD_ROOT'
+		Case $ReparseType = '0x9000201A'
+			Return 'CLOUD_ON_DEMAND'
+		Case $ReparseType = '0x9000301A'
+			Return 'CLOUD_ROOT_ON_DEMAND'
 		Case $ReparseType = '0x9000001C'
 			Return 'GVFS'
 		Case $ReparseType = '0xA0000003'
@@ -1597,8 +1609,14 @@ Func _GetReparseType($ReparseType)
 			Return 'SYMLINK'
 		Case $ReparseType = '0xA0000010'
 			Return 'IIS_CACHE'
+		Case $ReparseType = '0xA0000019'
+			Return 'GLOBAL_REPARSE'
 		Case $ReparseType = '0xA000001D'
 			Return 'LX_SYMLINK'
+		Case $ReparseType = '0xA000001F'
+			Return 'WCI_TOMBSTONE'
+		Case $ReparseType = '0xA0000022'
+			Return 'GVFS_TOMBSTONE'
 		Case $ReparseType = '0xC0000004'
 			Return 'HSM'
 		Case $ReparseType = '0xC0000014'
