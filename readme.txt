@@ -1,14 +1,15 @@
-This is a parser for INDX records of type $I30 and $O ($ObjId). 
+This is a parser for INDX records of type $I30, $O ($ObjId) and $R ($Reparse). 
 For $I30 this is the $INDEX_ALLOCATION attribute for directories which is an index with certain values from the $STANDARD_INFORMATION and $FILE_NAME attributes of all subitems (items within a folder).
 For $ObjId there is an $O index (in $INDEX_ALLOCATION and/or $INDEX_ROOT) that holds data for all files on the volume that contain an $ObjectId attribute in their MFT record. In order to scan for this, make sure Scan mode = 0.
+For $Reparse there is an $R index (in $INDEX_ALLOCATION and/or $INDEX_ROOT) that holds data for all files on the volume that contain an $REPARSE_POINT attribute in their MFT record. In order to scan for this, make sure Scan mode = 0.
 
 On NTFS there are various types of INDX present in addition to $I30:
 $INDEX_ALLOCATION:$SDH for $Secure. This is MftRef 9 and is the security descriptor hash index.
 $INDEX_ALLOCATION:$SII for $Secure. This is MftRef 9 and is the security id index.
-$INDEX_ALLOCATION:$O for $Quota. This is for MftRef 24.
-$INDEX_ALLOCATION:$Q for $Quota. This is for MftRef 24.
-$INDEX_ALLOCATION:$O for $ObjId. This is for MftRef 25 and is for the index that holds information about all files that have the $OBJECT_ID attribute present.
-$INDEX_ALLOCATION:$R for $Reparse. This is for MftRef 26 and is for the index that holds information about all files that have the $REPARSE_POINT attribute present.
+$INDEX_ALLOCATION:$O for $Quota. This is usually but not always for MftRef 24.
+$INDEX_ALLOCATION:$Q for $Quota. This is usually but not always for MftRef 24.
+$INDEX_ALLOCATION:$O for $ObjId. This is usually but not always for MftRef 25 and is for the index that holds information about all files that have the $OBJECT_ID attribute present.
+$INDEX_ALLOCATION:$R for $Reparse. This is usually but not always for MftRef 26 and is for the index that holds information about all files that have the $REPARSE_POINT attribute present.
 
 What input?
 For best results, use IndxCarver to extract the INDX records. That tool will filter output into 3, which makes sense. That is 1 for false positive, 1 for records with fixups applied, and 1 for records without fixups applied. This way it is also easier to distinguish them.
@@ -107,7 +108,7 @@ The available TimeZone's to use are:
 
 Error levels
 The current exit (error) codes have been implemented in commandline mode, which makes it more suited for batch scripting.
-1. No valid $I30 entries could be decoded. Empty output.
+1. No valid entries could be decoded. Empty output.
 4. Failure in writing fixed fragment to output. Validation of fragment succeeded though.
 
 Thus if you get %ERRORLEVEL% == 1 it means nothing was decoded, and if you get %ERRORLEVEL% == 4 then valid records where detected but could not be written to separate output (only used with /VerifyFragment: and /OutFragmentName:).

@@ -1,5 +1,10 @@
 Indx2Csv Changelog
 
+v1.0.0.10
+Added support for $Reparse $R.
+Added missing reparse tags.
+Added MySql schema and import sql for Indx-ReparseR-Entries_<timestamp>.csv to INDX_REPARSER table.
+
 v1.0.0.9
 Moved the import sql files into the new import-sql sub directory so that compilation works with the project as is.
 

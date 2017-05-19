@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=Decode INDX records
 #AutoIt3Wrapper_Res_Description=Decode INDX records
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.9
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.10
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 ;Program assumes input file like IndxCarver creates.
@@ -17,8 +17,8 @@
 #include <GuiEdit.au3>
 #Include <FileConstants.au3>
 Global $de="|", $PrecisionSeparator=".", $PrecisionSeparator2="",$DateTimeFormat, $TimestampPrecision,$IndxEntriesI30CsvFile,$IndxEntriesI30Csv,$CurrentFileOffset,$UTCconfig,$myctredit,$SeparatorInput
-Global $TimestampErrorVal = "0000-00-00 00:00:00",$ExampleTimestampVal = "01CD74B3150770B8", $IndxEntriesObjIdOCsvFile, $IndxEntriesObjIdOCsv
-Global $DoDefaultAll, $dol2t, $DoBodyfile, $hDebugOutFile, $hDebugObjIdOOutFile, $MaxRecords, $CurrentRecord, $WithQuotes, $EncodingWhenOpen = 2, $DoParseSlack=1, $DoFixups=1
+Global $TimestampErrorVal = "0000-00-00 00:00:00",$ExampleTimestampVal = "01CD74B3150770B8", $IndxEntriesObjIdOCsvFile, $IndxEntriesObjIdOCsv, $IndxEntriesReparseRCsvFile, $IndxEntriesReparseRCsv
+Global $DoDefaultAll, $dol2t, $DoBodyfile, $hDebugOutFile, $MaxRecords, $CurrentRecord, $WithQuotes, $EncodingWhenOpen = 2, $DoParseSlack=1, $DoFixups=1
 Global $CheckSlack,$CheckFixups,$CheckUnicode,$checkquotes
 Global $begin, $ElapsedTime, $EntryCounter, $ScanMode, $SectorSize=512, $ExtendedNameCheckChar=1, $ExtendedNameCheckWindows=1, $ExtendedNameCheckAll=1, $ExtendedTimestampCheck=1
 Global $ProgressStatus, $ProgressIndx
@@ -30,7 +30,7 @@ Global $INDXsig = "494E4458", $INDX_Size = 4096, $BinaryFragment, $RegExPatternH
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $TimeDiff = 5748192000000000
 
-$Progversion = "Indx2Csv 1.0.0.9"
+$Progversion = "Indx2Csv 1.0.0.10"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -150,22 +150,21 @@ Func _Main()
 		$ParserOutDir = @ScriptDir
 	EndIf
 
+	$DebugOutFile = $ParserOutDir & "\Indx_" & $TimestampStart & ".log"
+	$hDebugOutFile = FileOpen($DebugOutFile, $EncodingWhenOpen)
+	If @error Then
+		ConsoleWrite("Error: Could not create log file" & @CRLF)
+		MsgBox(0,"Error","Could not create log file")
+		Exit
+	EndIf
+
 	;$I30
-;	ConsoleWrite("Output directory: " & $ParserOutDir & @CRLF)
 	$IndxEntriesI30CsvFile = $ParserOutDir & "\Indx_I30_Entries_" & $TimestampStart & ".csv"
 	$IndxEntriesI30Csv = FileOpen($IndxEntriesI30CsvFile, $EncodingWhenOpen)
 	If @error Then
 		ConsoleWrite("Error creating: " & $IndxEntriesI30CsvFile & @CRLF)
 		If Not $CommandlineMode Then _DisplayInfo("Error creating: " & $IndxEntriesI30CsvFile & @CRLF)
 		Return
-	EndIf
-;	ConsoleWrite("Created output file: " & $IndxEntriesI30CsvFile & @CRLF)
-	$DebugOutFile = $ParserOutDir & "\Indx_I30_Entries_" & $TimestampStart & ".log"
-	$hDebugOutFile = FileOpen($ParserOutDir & "\Indx_I30_Entries_" & $TimestampStart & ".log", $EncodingWhenOpen)
-	If @error Then
-		ConsoleWrite("Error: Could not create log file" & @CRLF)
-		MsgBox(0,"Error","Could not create log file")
-		Exit
 	EndIf
 
 	;$ObjId:$O
@@ -176,18 +175,21 @@ Func _Main()
 		If Not $CommandlineMode Then _DisplayInfo("Error creating: " & $IndxEntriesObjIdOCsvFile & @CRLF)
 		Return
 	EndIf
-	$DebugObjIdOOutFile = $ParserOutDir & "\Indx_ObjIdO_Entries_" & $TimestampStart & ".log"
-	$hDebugObjIdOOutFile = FileOpen($ParserOutDir & "\Indx_ObjIdO_Entries_" & $TimestampStart & ".log", $EncodingWhenOpen)
+
+	;$Reparse:$R
+	$IndxEntriesReparseRCsvFile = $ParserOutDir & "\Indx_ReparseR_Entries_" & $TimestampStart & ".csv"
+	$IndxEntriesObjIdOCsv = FileOpen($IndxEntriesReparseRCsvFile, $EncodingWhenOpen)
 	If @error Then
-		ConsoleWrite("Error: Could not create log file" & @CRLF)
-		MsgBox(0,"Error","Could not create log file")
-		Exit
+		ConsoleWrite("Error creating: " & $IndxEntriesReparseRCsvFile & @CRLF)
+		If Not $CommandlineMode Then _DisplayInfo("Error creating: " & $IndxEntriesReparseRCsvFile & @CRLF)
+		Return
 	EndIf
 
 	_DumpOutput("Input file: " & $BinaryFragment & @CRLF)
 	_DumpOutput("Output directory: " & $ParserOutDir & @CRLF)
 	_DumpOutput("Csv: " & $IndxEntriesI30CsvFile & @CRLF)
 	_DumpOutput("Csv: " & $IndxEntriesObjIdOCsvFile & @CRLF)
+	_DumpOutput("Csv: " & $IndxEntriesReparseRCsvFile & @CRLF)
 
 ;---------------------
 	If Not $CommandlineMode Then
@@ -324,11 +326,19 @@ Func _Main()
 	_ReplaceStringInFile($IndxObjectIdSqlFile,"__PathToCsv__",$FixedPath)
 	If $CheckUnicode = 1 Then _ReplaceStringInFile($IndxObjectIdSqlFile,"latin1", "utf8")
 
+	$IndxReparseRSqlFile = $OutputPath & "\Indx_ReparseR_Entries_"&$TimestampStart&".sql"
+	FileInstall(".\import-sql\import-csv-INDX-reparser.sql", $IndxReparseRSqlFile)
+	$FixedPath = StringReplace($IndxEntriesReparseRCsvFile,"\","\\")
+	Sleep(500)
+	_ReplaceStringInFile($IndxReparseRSqlFile,"__PathToCsv__",$FixedPath)
+	If $CheckUnicode = 1 Then _ReplaceStringInFile($IndxReparseRSqlFile,"latin1", "utf8")
+
 	_DumpOutput("Scan mode: " & $ScanMode & @CRLF)
 ;----------------------------
 
 	_WriteCSVHeaderIndxEntries()
 	_WriteIndxObjIdOModuleCsvHeader()
+	_WriteIndxReparseRModuleCsvHeader()
 
 	$InputFileSize = _WinAPI_GetFileSizeEx($hFile)
 	$MaxRecords = Ceiling($InputFileSize/$INDX_Size)
@@ -401,6 +411,8 @@ Func _Main()
 			_DumpOutput("Empty output: " & $IndxEntriesI30CsvFile & " is postfixed with .empty" & @CRLF)
 			FileMove($IndxEntriesObjIdOCsvFile,$IndxEntriesObjIdOCsvFile&".empty",1)
 			_DumpOutput("Empty output: " & $IndxEntriesObjIdOCsvFile & " is postfixed with .empty" & @CRLF)
+			FileMove($IndxEntriesReparseRCsvFile,$IndxEntriesReparseRCsvFile&".empty",1)
+			_DumpOutput("Empty output: " & $IndxEntriesReparseRCsvFile & " is postfixed with .empty" & @CRLF)
 ;			If (_FileCountLines($IndxEntriesObjIdOCsvFile) < 2) Then
 ;				FileMove($IndxEntriesObjIdOCsvFile,$IndxEntriesObjIdOCsvFile&".empty",1)
 ;				_DumpOutput("Empty output: " & $IndxEntriesObjIdOCsvFile & " is postfixed with .empty")
@@ -426,6 +438,8 @@ Func _Main()
 	FileClose($IndxEntriesI30Csv)
 	FileFlush($IndxEntriesObjIdOCsv)
 	FileClose($IndxEntriesObjIdOCsv)
+	FileFlush($IndxEntriesReparseRCsv)
+	FileClose($IndxEntriesReparseRCsv)
 
 	If $CleanUp Then
 		FileDelete($IndxEntriesI30CsvFile)
@@ -441,6 +455,10 @@ Func _Main()
 		If (_FileCountLines($IndxEntriesObjIdOCsvFile) < 2) Then
 			FileMove($IndxEntriesObjIdOCsvFile,$IndxEntriesObjIdOCsvFile&".empty",1)
 			_DumpOutput("Empty output: " & $IndxEntriesObjIdOCsvFile & " is postfixed with .empty")
+		EndIf
+		If (_FileCountLines($IndxEntriesReparseRCsvFile) < 2) Then
+			FileMove($IndxEntriesReparseRCsvFile,$IndxEntriesReparseRCsvFile&".empty",1)
+			_DumpOutput("Empty output: " & $IndxEntriesReparseRCsvFile & " is postfixed with .empty")
 		EndIf
 	EndIf
 
@@ -968,7 +986,7 @@ EndFunc
 Func _ParseCoreValidData($InputData,$FirstEntryOffset)
 	Local $LocalOffset = 1, $SubNodeVCN, $EntryCounter=0
 	$TextInformation=""
-	$IndxLastLsn = -1
+;	$IndxLastLsn = -1
 ;	ConsoleWrite("_ParseCoreData():" & @crlf)
 ;	ConsoleWrite(_HexEncode("0x"&$InputData) & @crlf)
 	$SizeofIndxRecord = StringLen($InputData)
@@ -1335,7 +1353,7 @@ Func _ParseIndx($InputData)
 	If $DoFixups Then
 		$InputData = _ApplyFixupsIndx(StringMid($InputData,3))
 		If $InputData = "" Then
-			ConsoleWrite("Error: Fixups failed." & @CRLF)
+			_DumpOutput("Error: Fixups failed." & @CRLF)
 			Return 0
 		EndIf
 	EndIf
@@ -1344,34 +1362,34 @@ Func _ParseIndx($InputData)
 	$IndxLastLsn = Dec(_SwapEndian(StringMid($InputData,$LocalOffset+16,16)),2)
 ;	ConsoleWrite("$IndxLastLsn: " & $IndxLastLsn & @crlf)
 	If $IndxLastLsn = 0 Then
-		ConsoleWrite("Error in $IndxLastLsn: " & $IndxLastLsn & @crlf)
+		_DumpOutput("Error in $IndxLastLsn: " & $IndxLastLsn & @crlf)
 		Return 0
 	EndIf
 
 	$IndxHeaderSize = Dec(_SwapEndian(StringMid($InputData,$LocalOffset+48,8)),2)
 ;	ConsoleWrite("$IndxHeaderSize: " & $IndxHeaderSize & @crlf)
 	If $IndxHeaderSize = 0 Or Mod($IndxHeaderSize,8) Then
-		ConsoleWrite("Error in $IndxHeaderSize: " & $IndxHeaderSize & @crlf)
+		_DumpOutput("Error in $IndxHeaderSize: " & $IndxHeaderSize & @crlf)
 		Return 0
 	EndIf
 
 	$IndxRealSizeAllEntries = Dec(_SwapEndian(StringMid($InputData,$LocalOffset+56,8)),2)
 ;	ConsoleWrite("$IndxRealSizeAllEntries: " & $IndxRealSizeAllEntries & @crlf)
 	If $IndxRealSizeAllEntries = 0 Or Mod($IndxRealSizeAllEntries,8) Then
-		ConsoleWrite("Error in $IndxRecordSize: " & $IndxRealSizeAllEntries & @crlf)
+		_DumpOutput("Error in $IndxRecordSize: " & $IndxRealSizeAllEntries & @crlf)
 		Return 0
 	EndIf
 
 	$IndxAllocatedSize = Dec(_SwapEndian(StringMid($InputData,$LocalOffset+64,8)),2)
 ;	ConsoleWrite("$IndxAllocatedSize: " & $IndxAllocatedSize & @crlf)
 	If $IndxAllocatedSize = 0 Or Mod($IndxAllocatedSize,8) Then
-		ConsoleWrite("Error in $IndxAllocatedSize: " & $IndxAllocatedSize & @crlf)
+		_DumpOutput("Error in $IndxAllocatedSize: " & $IndxAllocatedSize & @crlf)
 		Return 0
 	EndIf
 
 	$IsNotLeafNode = Dec(StringMid($InputData,$LocalOffset+72,2))
 	If $IsNotLeafNode > 1 Then
-		ConsoleWrite("Error in $IsNotLeafNode" & @crlf)
+		_DumpOutput("Error in $IsNotLeafNode" & @crlf)
 		Return 0
 	EndIf
 	Local $DetectedEntries = 0
@@ -1392,6 +1410,10 @@ Func _ParseIndx($InputData)
 				$FromIndxSlack = 1
 				$DetectedEntries += $IndxValidationTest
 				$IndxValidationTest = _DecodeSlackIndxContentObjIdO(StringMid($InputData,$LocalOffset+($IndxRealSizeAllEntries+8)*2),($IndxRealSizeAllEntries+8)*2)
+				$DetectedEntries += $IndxValidationTest
+			Else
+				;Failure for both $I30 and $ObjId:$O, so we attempt $Reparse:$R
+				$IndxValidationTest = _Decode_Reparse_R(StringMid($InputData,$LocalOffset+48+($IndxHeaderSize*2),($IndxRealSizeAllEntries+8)*2),24+$IndxHeaderSize)
 				$DetectedEntries += $IndxValidationTest
 			EndIf
 		EndIf
@@ -1526,11 +1548,15 @@ Func _SelectFragment()
 EndFunc
 
 Func _GetReparseType($ReparseType)
-	;http://msdn.microsoft.com/en-us/library/dd541667(v=prot.10).aspx
-	;http://msdn.microsoft.com/en-us/library/windows/desktop/aa365740(v=vs.85).aspx
+	;winnt.h
+	;ntifs.h
 	Select
 		Case $ReparseType = '0x00000000'
-			Return 'ZERO'
+			Return 'RESERVED_ZERO'
+		Case $ReparseType = '0x00000001'
+			Return 'RESERVED_ONE'
+		Case $ReparseType = '0x00000002'
+			Return 'RESERVED_TWO'
 		Case $ReparseType = '0x80000005'
 			Return 'DRIVER_EXTENDER'
 		Case $ReparseType = '0x80000006'
@@ -1551,16 +1577,32 @@ Func _GetReparseType($ReparseType)
 			Return 'DEDUP'
 		Case $ReparseType = '0x80000014'
 			Return 'NFS'
-		Case $ReparseType = '0xA0000003'
-			Return 'MOUNT_POINT'
-		Case $ReparseType = '0xA000000C'
-			Return 'SYMLINK'
-		Case $ReparseType = '0xC0000004'
-			Return 'HSM'
 		Case $ReparseType = '0x80000015'
 			Return 'FILE_PLACEHOLDER'
 		Case $ReparseType = '0x80000017'
 			Return 'WOF'
+		Case $ReparseType = '0x80000018'
+			Return 'WCI'
+		Case $ReparseType = '0x80000019'
+			Return 'GLOBAL_REPARSE'
+		Case $ReparseType = '0x8000001B'
+			Return 'APPEXECLINK'
+		Case $ReparseType = '0x9000001A'
+			Return 'CLOUD'
+		Case $ReparseType = '0x9000001C'
+			Return 'GVFS'
+		Case $ReparseType = '0xA0000003'
+			Return 'MOUNT_POINT'
+		Case $ReparseType = '0xA000000C'
+			Return 'SYMLINK'
+		Case $ReparseType = '0xA0000010'
+			Return 'IIS_CACHE'
+		Case $ReparseType = '0xA000001D'
+			Return 'LX_SYMLINK'
+		Case $ReparseType = '0xC0000004'
+			Return 'HSM'
+		Case $ReparseType = '0xC0000014'
+			Return 'APPXSTRM'
 		Case Else
 			Return 'UNKNOWN(' & $ReparseType & ')'
 	EndSelect
@@ -2243,6 +2285,10 @@ Func _DecodeIndxContentObjIdO($InputData,$FirstEntryOffset)
 
 		;Decode guid
 		$Indx_GUIDObjectId_Version = Dec(StringMid($Indx_GUIDObjectId,15,1))
+		If $Indx_GUIDObjectId_Version = 0 Or $Indx_GUIDObjectId_Version > 4 Then
+			ConsoleWrite("Error: Invalid ObjectId_Version: " & $Indx_GUIDObjectId_Version & @crlf)
+			Return 0
+		EndIf
 		$Indx_GUIDObjectId_Timestamp = StringMid($Indx_GUIDObjectId,1,14) & "0" & StringMid($Indx_GUIDObjectId,16,1)
 		$Indx_GUIDObjectId_TimestampDec = Dec(_SwapEndian($Indx_GUIDObjectId_Timestamp),2)
 		$Indx_GUIDObjectId_Timestamp = _DecodeTimestampFromGuid($Indx_GUIDObjectId_Timestamp)
@@ -2512,4 +2558,111 @@ Func _DecodeTimestampFromGuid($StampDecode)
 		$StampDecode = $StampDecode & $PrecisionSeparator2 & _FillZero(StringRight($StampDecode_tmp, 4))
 	EndIf
 	Return $StampDecode
+EndFunc
+
+Func _Decode_Reparse_R($InputData, $FirstEntryOffset)
+	Local $EntryCounter=0, $VerboseOn=1
+	$StartOffset = 1
+	$InputDataSize = StringLen($InputData)
+
+	ConsoleWrite("_Decode_Reparse_R():" & @CRLF)
+	ConsoleWrite(_HexEncode("0x"&$InputData) & @CRLF)
+
+	Do
+		$RecordOffset = "0x" & Hex(Int($CurrentFileOffset + (($StartOffset-1)/2) + $FirstEntryOffset))
+
+		$DataOffset = StringMid($InputData, $StartOffset, 4)
+		$DataOffset = Dec(_SwapEndian($DataOffset),2)
+
+		$DataSize = StringMid($InputData, $StartOffset + 4, 4)
+		$DataSize = Dec(_SwapEndian($DataSize),2)
+
+		If $DataOffset = 0 Then
+			ConsoleWrite("Error: Invalid DataOffset" & @crlf)
+			;ConsoleWrite(_HexEncode("0x"&StringMid($InputData, $StartOffset)) & @crlf)
+			Return $EntryCounter
+		EndIf
+
+		;Padding 4 bytes
+		$Padding1 = StringMid($InputData, $StartOffset + 8, 8)
+		$Padding1 = Dec(_SwapEndian($Padding1),2)
+		If $Padding1 <> 0 Then
+			ConsoleWrite("Error: Invalid Padding1" & @crlf)
+			Return $EntryCounter
+		EndIf
+
+		$IndexEntrySize = StringMid($InputData, $StartOffset + 16, 4)
+		$IndexEntrySize = Dec(_SwapEndian($IndexEntrySize),2)
+		If $IndexEntrySize = 0 Then ExitLoop
+
+		$IndexKeySize = StringMid($InputData, $StartOffset + 20, 4)
+		$IndexKeySize = Dec(_SwapEndian($IndexKeySize),2)
+
+		$Flags = StringMid($InputData, $StartOffset + 24, 4)
+;		If Dec(_SwapEndian($Flags),2) > 2 Then
+;			ConsoleWrite("Error: Invalid Flags" & @crlf)
+;			Return 0
+;		EndIf
+		$Flags = "0x" & _SwapEndian($Flags)
+
+		;Padding 2 bytes
+		$Padding2 = StringMid($InputData, $StartOffset + 28, 4)
+		$Padding2 = Dec(_SwapEndian($Padding2),2)
+		If $Padding2 <> 0 Then
+			ConsoleWrite("Error: Invalid Padding2" & @crlf)
+			Return $EntryCounter
+		EndIf
+
+		$KeyReparseTag = StringMid($InputData, $StartOffset + 32, 8)
+		$KeyReparseTag = "0x" & _SwapEndian($KeyReparseTag)
+		$KeyReparseTag = _GetReparseType($KeyReparseTag)
+		If StringInStr($KeyReparseTag, "UNKNOWN") Then
+			ConsoleWrite("Error: Invalid KeyReparseTag: " & $KeyReparseTag & @crlf)
+			Return $EntryCounter
+		EndIf
+
+		$KeyMftRefOfReparsePoint = StringMid($InputData, $StartOffset + 40, 12)
+		$KeyMftRefOfReparsePoint = Dec(_SwapEndian($KeyMftRefOfReparsePoint),2)
+		If $KeyMftRefOfReparsePoint = 0 Then
+			ConsoleWrite("Error: Invalid MftRef: " & $KeyMftRefOfReparsePoint & @crlf)
+			Return $EntryCounter
+		EndIf
+
+		$KeyMftRefSeqNoOfReparsePoint = StringMid($InputData, $StartOffset + 52, 4)
+		$KeyMftRefSeqNoOfReparsePoint = Dec(_SwapEndian($KeyMftRefSeqNoOfReparsePoint),2)
+		If $KeyMftRefSeqNoOfReparsePoint = 0x0 Or $KeyMftRefSeqNoOfReparsePoint = 0xFFFF Then
+			ConsoleWrite("Error: Invalid MftRefSeqNo: " & $KeyMftRefSeqNoOfReparsePoint & @crlf)
+			Return $EntryCounter
+		EndIf
+
+		ConsoleWrite(@CRLF)
+		ConsoleWrite(_HexEncode("0x"&StringMid($InputData, $StartOffset, $IndexEntrySize*2)) & @CRLF)
+		ConsoleWrite("$EntryCounter: " & $EntryCounter & @CRLF)
+		ConsoleWrite("$DataOffset: " & $DataOffset & @CRLF)
+		ConsoleWrite("$DataSize: " & $DataSize & @CRLF)
+		ConsoleWrite("$IndexEntrySize: " & $IndexEntrySize & @CRLF)
+		ConsoleWrite("$IndexKeySize: " & $IndexKeySize & @CRLF)
+		ConsoleWrite("$Flags: " & $Flags & @CRLF)
+		ConsoleWrite("$KeyReparseTag: " & $KeyReparseTag & @CRLF)
+		ConsoleWrite("$KeyMftRefOfReparsePoint: " & $KeyMftRefOfReparsePoint & @CRLF)
+		ConsoleWrite("$KeyMftRefSeqNoOfReparsePoint: " & $KeyMftRefSeqNoOfReparsePoint & @CRLF)
+
+		;Padding 4 bytes
+		$Padding3 = StringMid($InputData, $StartOffset + 56, 8)
+		$Padding3 = Dec(_SwapEndian($Padding3),2)
+		If $Padding3 <> 0 Then
+			ConsoleWrite("Error: Invalid Padding3" & @crlf)
+			Return $EntryCounter
+		EndIf
+
+		FileWriteLine($IndxEntriesReparseRCsvFile, $RecordOffset&$de&$IndxLastLsn&$de&$FromIndxSlack&$de&$DataOffset&$de&$DataSize&$de&$Padding1&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$Padding2&$de&$KeyMftRefOfReparsePoint&$de&$KeyMftRefSeqNoOfReparsePoint&$de&$KeyReparseTag&@crlf)
+		$EntryCounter+=1
+		$StartOffset += $IndexEntrySize*2
+	Until $StartOffset >= $InputDataSize
+	Return $EntryCounter
+EndFunc
+
+Func _WriteIndxReparseRModuleCsvHeader()
+	$Indx_Csv_Header = "Offset"&$de&"LastLsn"&$de&"FromIndxSlack"&$de&"DataOffset"&$de&"DataSize"&$de&"Padding1"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"Padding2"&$de&"MftRef"&$de&"MftRefSeqNo"&$de&"KeyReparseTag"
+	FileWriteLine($IndxEntriesReparseRCsvFile, $Indx_Csv_Header & @CRLF)
 EndFunc

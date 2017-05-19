@@ -1,0 +1,13 @@
+LOAD DATA LOCAL INFILE "__PathToCsv__"
+INTO TABLE INDX_REPARSER
+CHARACTER SET 'latin1'
+COLUMNS TERMINATED BY '|'
+OPTIONALLY ENCLOSED BY '"'
+ESCAPED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 LINES
+(`Offset`, `LastLsn`, `FromIndxSlack`, `DataOffset`, `DataSize`, `Padding1`, `IndexEntrySize`, `IndexKeySize`, `Flags`, `Padding2`, @MftRef, @MftRefSeqNo, `KeyReparseTag`)
+SET 
+MftRef = nullif(@MftRef,''),
+MftRefSeqNo = nullif(@MftRefSeqNo,'')
+;
