@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=Decode INDX records
 #AutoIt3Wrapper_Res_Description=Decode INDX records
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.11
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.12
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 ;Program assumes input file like IndxCarver creates.
@@ -21,7 +21,7 @@ Global $TimestampErrorVal = "0000-00-00 00:00:00",$ExampleTimestampVal = "01CD74
 Global $DoDefaultAll, $dol2t, $DoBodyfile, $hDebugOutFile, $MaxRecords, $CurrentRecord, $WithQuotes, $EncodingWhenOpen = 2, $DoParseSlack=1, $DoFixups=1
 Global $CheckSlack,$CheckFixups,$CheckUnicode,$checkquotes
 Global $begin, $ElapsedTime, $EntryCounter, $ScanMode, $SectorSize=512, $ExtendedNameCheckChar=1, $ExtendedNameCheckWindows=1, $ExtendedNameCheckAll=1, $ExtendedTimestampCheck=1
-Global $ProgressStatus, $ProgressIndx
+Global $ProgressStatus, $ProgressIndx, $IsNotLeafNode, $IndxCurrentVcn
 Global $RecordOffset,$IndxLastLsn,$FromIndxSlack,$MFTReference,$MFTReferenceSeqNo,$IndexFlags,$MFTReferenceOfParent,$MFTReferenceOfParentSeqNo
 Global $Indx_CTime,$Indx_ATime,$Indx_MTime,$Indx_RTime,$Indx_AllocSize,$Indx_RealSize,$Indx_File_Flags,$Indx_ReparseTag,$Indx_FileName,$Indx_NameSpace,$SubNodeVCN,$TextInformation
 Global $SkipUnicodeNames = 1 ;Will improve recovery of entries from slack
@@ -30,7 +30,7 @@ Global $INDXsig = "494E4458", $INDX_Size = 4096, $BinaryFragment, $RegExPatternH
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $TimeDiff = 5748192000000000
 
-$Progversion = "Indx2Csv 1.0.0.11"
+$Progversion = "Indx2Csv 1.0.0.12"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -144,6 +144,25 @@ Func _Main()
 		Exit
 	EndIf
 
+	If $CommandlineMode Then
+		$TestUnicode = $CheckUnicode
+	Else
+		$TestUnicode = GUICtrlRead($CheckUnicode)
+	EndIf
+	ConsoleWrite("$TestUnicode: " & $TestUnicode & @CRLF)
+	If $TestUnicode = 1 Then
+		;$EncodingWhenOpen = 2+32 ;ucs2
+		$EncodingWhenOpen = 2+128 ;utf8 w/bom
+;		If Not $CommandlineMode Then _DisplayInfo("UNICODE configured" & @CRLF)
+		_DumpOutput("UNICODE configured" & @CRLF)
+		$SkipUnicodeNames=0
+	Else
+		$EncodingWhenOpen = 2
+;		If Not $CommandlineMode Then _DisplayInfo("ANSI configured" & @CRLF)
+		_DumpOutput("ANSI configured" & @CRLF)
+		$SkipUnicodeNames=1
+	EndIf
+
 	$TimestampStart = @YEAR & "-" & @MON & "-" & @MDAY & "_" & @HOUR & "-" & @MIN & "-" & @SEC
 
 	If Not FileExists($ParserOutDir) Then
@@ -233,24 +252,6 @@ Func _Main()
 			Return
 		EndIf
 		$tDelta = $tDelta*-1 ;Since delta is substracted from timestamp later on
-	EndIf
-
-	If $CommandlineMode Then
-		$TestUnicode = $CheckUnicode
-	Else
-		$TestUnicode = GUICtrlRead($CheckUnicode)
-	EndIf
-	If $TestUnicode = 1 Then
-		;$EncodingWhenOpen = 2+32 ;ucs2
-		$EncodingWhenOpen = 2+128 ;utf8 w/bom
-;		If Not $CommandlineMode Then _DisplayInfo("UNICODE configured" & @CRLF)
-		_DumpOutput("UNICODE configured" & @CRLF)
-		$SkipUnicodeNames=0
-	Else
-		$EncodingWhenOpen = 2
-;		If Not $CommandlineMode Then _DisplayInfo("ANSI configured" & @CRLF)
-		_DumpOutput("ANSI configured" & @CRLF)
-		$SkipUnicodeNames=1
 	EndIf
 
 	If $CommandlineMode Then
@@ -974,12 +975,12 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 			ConsoleWrite("Output fragment verified and written to: " & $ParserOutDir & "\" & $OutFragmentName & @CRLF)
 		EndIf
 	EndIf
-	If Not $CleanUp Then FileWriteLine($IndxEntriesI30CsvFile, $RecordOffset & $de & $IndxLastLsn & $de & 1 & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
+	If Not $CleanUp Then FileWriteLine($IndxEntriesI30CsvFile, $RecordOffset & $de & $IndxCurrentVcn & $de & $IsNotLeafNode & $de & $IndxLastLsn & $de & 1 & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
 	Return 1
 EndFunc
 
 Func _WriteCSVHeaderIndxEntries()
-	$Indx_Csv_Header = "Offset"&$de&"LastLsn"&$de&"FromIndxSlack"&$de&"FileName"&$de&"MFTReference"&$de&"MFTReferenceSeqNo"&$de&"IndexFlags"&$de&"MFTParentReference"&$de&"MFTParentReferenceSeqNo"&$de&"CTime"&$de&"ATime"&$de&"MTime"&$de&"RTime"&$de&"AllocSize"&$de&"RealSize"&$de&"FileFlags"&$de&"ReparseTag"&$de&"EaSize"&$de&"NameSpace"&$de&"SubNodeVCN"&$de&"CorruptEntries"
+	$Indx_Csv_Header = "Offset"&$de&"Vcn"&$de&"IsNotLeaf"&$de&"LastLsn"&$de&"FromIndxSlack"&$de&"FileName"&$de&"MFTReference"&$de&"MFTReferenceSeqNo"&$de&"IndexFlags"&$de&"MFTParentReference"&$de&"MFTParentReferenceSeqNo"&$de&"CTime"&$de&"ATime"&$de&"MTime"&$de&"RTime"&$de&"AllocSize"&$de&"RealSize"&$de&"FileFlags"&$de&"ReparseTag"&$de&"EaSize"&$de&"NameSpace"&$de&"SubNodeVCN"&$de&"CorruptEntries"
 	FileWriteLine($IndxEntriesI30CsvFile, $Indx_Csv_Header & @CRLF)
 EndFunc
 
@@ -1133,7 +1134,7 @@ Func _ParseCoreValidData($InputData,$FirstEntryOffset)
 		EndIf
 
 		If $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal Then
-			FileWriteLine($IndxEntriesI30CsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
+			FileWriteLine($IndxEntriesI30CsvFile, $RecordOffset & $de & $IndxCurrentVcn & $de & $IsNotLeafNode & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
 			$LocalOffset += $IndexEntryLength*2
 			$EntryCounter+=1
 			_ClearVar()
@@ -1323,7 +1324,7 @@ Func _ParseCoreSlackSpace($InputData,$SkeewedOffset)
 			If $MFTReferenceOfParentSeqNo = 0 Then $TextInformation &= ";MFTReferenceOfParent;MFTReferenceOfParentSeqNo"
 			If ($DoReparseTag And StringInStr($Indx_ReparseTag,"UNKNOWN")) Then $TextInformation &= ";ReparseTag"
 			If ($DoEaSize And $Indx_EaSize < 8) Then $TextInformation &= ";EaSize"
-			FileWriteLine($IndxEntriesI30CsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
+			FileWriteLine($IndxEntriesI30CsvFile, $RecordOffset & $de & $IndxCurrentVcn & $de & $IsNotLeafNode & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
 			If $IndexEntryLength = 0 Then $IndexEntryLength = (32+26+$Indx_NameLength)*2
 			$LocalOffset += $IndexEntryLength*2
 			$EntryCounter+=1
@@ -1361,10 +1362,17 @@ Func _ParseIndx($InputData)
 ;	If $TestData <> "" Then $InputData = $TestData
 	$IndxLastLsn = Dec(_SwapEndian(StringMid($InputData,$LocalOffset+16,16)),2)
 ;	ConsoleWrite("$IndxLastLsn: " & $IndxLastLsn & @crlf)
-	If $IndxLastLsn = 0 Then
-		_DumpOutput("Error in $IndxLastLsn: " & $IndxLastLsn & @crlf)
-		Return 0
-	EndIf
+;	If $IndxLastLsn = 0 Then
+;		_DumpOutput("Error in $IndxLastLsn: " & $IndxLastLsn & @crlf)
+;		Return 0
+;	EndIf
+
+	$IndxCurrentVcn = Dec(_SwapEndian(StringMid($InputData,$LocalOffset+32,16)),2)
+;	ConsoleWrite("$IndxCurrentVcn: " & $IndxCurrentVcn & @crlf)
+;	If $IndxCurrentVcn > 0xFFFFFFFFFF Then
+;		_DumpOutput("Error in $IndxCurrentVcn: " & $IndxCurrentVcn & @crlf)
+;		Return 0
+;	EndIf
 
 	$IndxHeaderSize = Dec(_SwapEndian(StringMid($InputData,$LocalOffset+48,8)),2)
 ;	ConsoleWrite("$IndxHeaderSize: " & $IndxHeaderSize & @crlf)
@@ -2367,7 +2375,7 @@ Func _DecodeIndxContentObjIdO($InputData,$FirstEntryOffset)
 		$Indx_GUIDDomainId = _HexToGuidStr($Indx_GUIDDomainId,1)
 
 		;FileWriteLine($IndxEntriesObjIdOCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_DataOffset & $de & $Indx_DataSize & $de & $Indx_Padding1 & $de & $Indx_IndexEntrySize & $de & $Indx_IndexKeySize & $de & $Indx_Flags & $de & $Indx_Padding2 & $de & $Indx_GUIDObjectId & $de & $Indx_MftRef & $de & $Indx_MftRefSeqNo & $de & $Indx_GUIDBirthVolumeId & $de & $Indx_GUIDBirthObjectId & $de & $Indx_GUIDDomainId & $de & $Indx_GUIDObjectId_Version & $de & $Indx_GUIDObjectId_Timestamp & $de & $Indx_GUIDObjectId_TimestampDec & $de & $Indx_GUIDObjectId_ClockSeq & $de & $Indx_GUIDObjectId_Node & $de & $Indx_GUIDBirthVolumeId_Version & $de & $Indx_GUIDBirthVolumeId_Timestamp & $de & $Indx_GUIDBirthVolumeId_TimestampDec & $de & $Indx_GUIDBirthVolumeId_ClockSeq & $de & $Indx_GUIDBirthVolumeId_Node & $de & $Indx_GUIDBirthObjectId_Version & $de & $Indx_GUIDBirthObjectId_Timestamp & $de & $Indx_GUIDBirthObjectId_TimestampDec & $de & $Indx_GUIDBirthObjectId_ClockSeq & $de & $Indx_GUIDBirthObjectId_Node & $de & $Indx_GUIDDomainId_Version & $de & $Indx_GUIDDomainId_Timestamp & $de & $Indx_GUIDDomainId_TimestampDec & $de & $Indx_GUIDDomainId_ClockSeq & $de & $Indx_GUIDDomainId_Node & $de & $TextInformation & @crlf)
-		FileWriteLine($IndxEntriesObjIdOCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_DataOffset & $de & $Indx_DataSize & $de & $Indx_Padding1 & $de & $Indx_IndexEntrySize & $de & $Indx_IndexKeySize & $de & $Indx_Flags & $de & $Indx_Padding2 & $de & $Indx_MftRef & $de & $Indx_MftRefSeqNo & $de & $Indx_GUIDObjectId & $de & $Indx_GUIDObjectId_Version & $de & $Indx_GUIDObjectId_Timestamp & $de & $Indx_GUIDObjectId_TimestampDec & $de & $Indx_GUIDObjectId_ClockSeq & $de & $Indx_GUIDObjectId_Node & $de & $Indx_GUIDBirthVolumeId & $de & $Indx_GUIDBirthVolumeId_Version & $de & $Indx_GUIDBirthVolumeId_Timestamp & $de & $Indx_GUIDBirthVolumeId_TimestampDec & $de & $Indx_GUIDBirthVolumeId_ClockSeq & $de & $Indx_GUIDBirthVolumeId_Node & $de & $Indx_GUIDBirthObjectId & $de & $Indx_GUIDBirthObjectId_Version & $de & $Indx_GUIDBirthObjectId_Timestamp & $de & $Indx_GUIDBirthObjectId_TimestampDec & $de & $Indx_GUIDBirthObjectId_ClockSeq & $de & $Indx_GUIDBirthObjectId_Node & $de & $Indx_GUIDDomainId & $de & $Indx_GUIDDomainId_Version & $de & $Indx_GUIDDomainId_Timestamp & $de & $Indx_GUIDDomainId_TimestampDec & $de & $Indx_GUIDDomainId_ClockSeq & $de & $Indx_GUIDDomainId_Node & $de & $TextInformation & @crlf)
+		FileWriteLine($IndxEntriesObjIdOCsvFile, $RecordOffset & $de & $IndxCurrentVcn & $de & $IsNotLeafNode & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_DataOffset & $de & $Indx_DataSize & $de & $Indx_Padding1 & $de & $Indx_IndexEntrySize & $de & $Indx_IndexKeySize & $de & $Indx_Flags & $de & $Indx_Padding2 & $de & $Indx_MftRef & $de & $Indx_MftRefSeqNo & $de & $Indx_GUIDObjectId & $de & $Indx_GUIDObjectId_Version & $de & $Indx_GUIDObjectId_Timestamp & $de & $Indx_GUIDObjectId_TimestampDec & $de & $Indx_GUIDObjectId_ClockSeq & $de & $Indx_GUIDObjectId_Node & $de & $Indx_GUIDBirthVolumeId & $de & $Indx_GUIDBirthVolumeId_Version & $de & $Indx_GUIDBirthVolumeId_Timestamp & $de & $Indx_GUIDBirthVolumeId_TimestampDec & $de & $Indx_GUIDBirthVolumeId_ClockSeq & $de & $Indx_GUIDBirthVolumeId_Node & $de & $Indx_GUIDBirthObjectId & $de & $Indx_GUIDBirthObjectId_Version & $de & $Indx_GUIDBirthObjectId_Timestamp & $de & $Indx_GUIDBirthObjectId_TimestampDec & $de & $Indx_GUIDBirthObjectId_ClockSeq & $de & $Indx_GUIDBirthObjectId_Node & $de & $Indx_GUIDDomainId & $de & $Indx_GUIDDomainId_Version & $de & $Indx_GUIDDomainId_Timestamp & $de & $Indx_GUIDDomainId_TimestampDec & $de & $Indx_GUIDDomainId_ClockSeq & $de & $Indx_GUIDDomainId_Node & $de & $TextInformation & @crlf)
 		$EntryCounter += 1
 		$LocalOffset += 176
 		If $LocalOffset >= $SizeofIndxRecord Then
@@ -2529,7 +2537,7 @@ Func _DecodeSlackIndxContentObjIdO($InputData,$FirstEntryOffset)
 			;If $Indx_Padding1 > 0 Then $TextInformation &= ";Padding1"
 			;If $Indx_IndexEntrySize = 0 Then $TextInformation &= ";IndexEntrySize"
 			;If $Indx_IndexKeySize = 0 Then $TextInformation &= ";IndexKeySize"
-			FileWriteLine($IndxEntriesObjIdOCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_DataOffset & $de & $Indx_DataSize & $de & $Indx_Padding1 & $de & $Indx_IndexEntrySize & $de & $Indx_IndexKeySize & $de & $Indx_Flags & $de & $Indx_Padding2 & $de & $Indx_MftRef & $de & $Indx_MftRefSeqNo & $de & $Indx_GUIDObjectId & $de & $Indx_GUIDObjectId_Version & $de & $Indx_GUIDObjectId_Timestamp & $de & $Indx_GUIDObjectId_TimestampDec & $de & $Indx_GUIDObjectId_ClockSeq & $de & $Indx_GUIDObjectId_Node & $de & $Indx_GUIDBirthVolumeId & $de & $Indx_GUIDBirthVolumeId_Version & $de & $Indx_GUIDBirthVolumeId_Timestamp & $de & $Indx_GUIDBirthVolumeId_TimestampDec & $de & $Indx_GUIDBirthVolumeId_ClockSeq & $de & $Indx_GUIDBirthVolumeId_Node & $de & $Indx_GUIDBirthObjectId & $de & $Indx_GUIDBirthObjectId_Version & $de & $Indx_GUIDBirthObjectId_Timestamp & $de & $Indx_GUIDBirthObjectId_TimestampDec & $de & $Indx_GUIDBirthObjectId_ClockSeq & $de & $Indx_GUIDBirthObjectId_Node & $de & $Indx_GUIDDomainId & $de & $Indx_GUIDDomainId_Version & $de & $Indx_GUIDDomainId_Timestamp & $de & $Indx_GUIDDomainId_TimestampDec & $de & $Indx_GUIDDomainId_ClockSeq & $de & $Indx_GUIDDomainId_Node & $de & $TextInformation & @crlf)
+			FileWriteLine($IndxEntriesObjIdOCsvFile, $RecordOffset & $de & $IndxCurrentVcn & $de & $IsNotLeafNode & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_DataOffset & $de & $Indx_DataSize & $de & $Indx_Padding1 & $de & $Indx_IndexEntrySize & $de & $Indx_IndexKeySize & $de & $Indx_Flags & $de & $Indx_Padding2 & $de & $Indx_MftRef & $de & $Indx_MftRefSeqNo & $de & $Indx_GUIDObjectId & $de & $Indx_GUIDObjectId_Version & $de & $Indx_GUIDObjectId_Timestamp & $de & $Indx_GUIDObjectId_TimestampDec & $de & $Indx_GUIDObjectId_ClockSeq & $de & $Indx_GUIDObjectId_Node & $de & $Indx_GUIDBirthVolumeId & $de & $Indx_GUIDBirthVolumeId_Version & $de & $Indx_GUIDBirthVolumeId_Timestamp & $de & $Indx_GUIDBirthVolumeId_TimestampDec & $de & $Indx_GUIDBirthVolumeId_ClockSeq & $de & $Indx_GUIDBirthVolumeId_Node & $de & $Indx_GUIDBirthObjectId & $de & $Indx_GUIDBirthObjectId_Version & $de & $Indx_GUIDBirthObjectId_Timestamp & $de & $Indx_GUIDBirthObjectId_TimestampDec & $de & $Indx_GUIDBirthObjectId_ClockSeq & $de & $Indx_GUIDBirthObjectId_Node & $de & $Indx_GUIDDomainId & $de & $Indx_GUIDDomainId_Version & $de & $Indx_GUIDDomainId_Timestamp & $de & $Indx_GUIDDomainId_TimestampDec & $de & $Indx_GUIDDomainId_ClockSeq & $de & $Indx_GUIDDomainId_Node & $de & $TextInformation & @crlf)
 			$EntryCounter += 1
 			;We can jump by fixed size since all entries in this index are of fixed size. In $I30 this is different because filename length varies.
 			$LocalOffset += 176
@@ -2556,7 +2564,7 @@ Func _HexToGuidStr($input,$mode)
 EndFunc
 
 Func _WriteIndxObjIdOModuleCsvHeader()
-	$Indx_Csv_Header = "Offset"&$de&"LastLsn"&$de&"FromIndxSlack"&$de&"DataOffset"&$de&"DataSize"&$de&"Padding1"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"Padding2"&$de&"MftRef"&$de&"MftRefSeqNo"&$de&"ObjectId"&$de&"ObjectId_Version"&$de&"ObjectId_Timestamp"&$de&"ObjectId_TimestampDec"&$de&"ObjectId_ClockSeq"&$de&"ObjectId_Node"&$de&"BirthVolumeId"&$de&"BirthVolumeId_Version"&$de&"BirthVolumeId_Timestamp"&$de&"BirthVolumeId_TimestampDec"&$de&"BirthVolumeId_ClockSeq"&$de&"BirthVolumeId_Node"&$de&"BirthObjectId"&$de&"BirthObjectId_Version"&$de&"BirthObjectId_Timestamp"&$de&"BirthObjectId_TimestampDec"&$de&"BirthObjectId_ClockSeq"&$de&"BirthObjectId_Node"&$de&"DomainId"&$de&"DomainId_Version"&$de&"DomainId_Timestamp"&$de&"DomainId_TimestampDec"&$de&"DomainId_ClockSeq"&$de&"DomainId_Node"&$de&"TextInformation"
+	$Indx_Csv_Header = "Offset"&$de&"Vcn"&$de&"IsNotLeaf"&$de&"LastLsn"&$de&"FromIndxSlack"&$de&"DataOffset"&$de&"DataSize"&$de&"Padding1"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"Padding2"&$de&"MftRef"&$de&"MftRefSeqNo"&$de&"ObjectId"&$de&"ObjectId_Version"&$de&"ObjectId_Timestamp"&$de&"ObjectId_TimestampDec"&$de&"ObjectId_ClockSeq"&$de&"ObjectId_Node"&$de&"BirthVolumeId"&$de&"BirthVolumeId_Version"&$de&"BirthVolumeId_Timestamp"&$de&"BirthVolumeId_TimestampDec"&$de&"BirthVolumeId_ClockSeq"&$de&"BirthVolumeId_Node"&$de&"BirthObjectId"&$de&"BirthObjectId_Version"&$de&"BirthObjectId_Timestamp"&$de&"BirthObjectId_TimestampDec"&$de&"BirthObjectId_ClockSeq"&$de&"BirthObjectId_Node"&$de&"DomainId"&$de&"DomainId_Version"&$de&"DomainId_Timestamp"&$de&"DomainId_TimestampDec"&$de&"DomainId_ClockSeq"&$de&"DomainId_Node"&$de&"TextInformation"
 	FileWriteLine($IndxEntriesObjIdOCsvFile, $Indx_Csv_Header & @CRLF)
 EndFunc
 
@@ -2673,7 +2681,7 @@ Func _Decode_Reparse_R($InputData, $FirstEntryOffset)
 			Return $EntryCounter
 		EndIf
 
-		FileWriteLine($IndxEntriesReparseRCsvFile, $RecordOffset&$de&$IndxLastLsn&$de&$FromIndxSlack&$de&$DataOffset&$de&$DataSize&$de&$Padding1&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$Padding2&$de&$KeyMftRefOfReparsePoint&$de&$KeyMftRefSeqNoOfReparsePoint&$de&$KeyReparseTag&@crlf)
+		FileWriteLine($IndxEntriesReparseRCsvFile, $RecordOffset&$de&$IndxCurrentVcn&$de&$IsNotLeafNode&$de&$IndxLastLsn&$de&$FromIndxSlack&$de&$DataOffset&$de&$DataSize&$de&$Padding1&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$Padding2&$de&$KeyMftRefOfReparsePoint&$de&$KeyMftRefSeqNoOfReparsePoint&$de&$KeyReparseTag&@crlf)
 		$EntryCounter+=1
 		$StartOffset += $IndexEntrySize*2
 	Until $StartOffset >= $InputDataSize
@@ -2681,6 +2689,6 @@ Func _Decode_Reparse_R($InputData, $FirstEntryOffset)
 EndFunc
 
 Func _WriteIndxReparseRModuleCsvHeader()
-	$Indx_Csv_Header = "Offset"&$de&"LastLsn"&$de&"FromIndxSlack"&$de&"DataOffset"&$de&"DataSize"&$de&"Padding1"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"Padding2"&$de&"MftRef"&$de&"MftRefSeqNo"&$de&"KeyReparseTag"
+	$Indx_Csv_Header = "Offset"&$de&"Vcn"&$de&"IsNotLeaf"&$de&"LastLsn"&$de&"FromIndxSlack"&$de&"DataOffset"&$de&"DataSize"&$de&"Padding1"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"Padding2"&$de&"MftRef"&$de&"MftRefSeqNo"&$de&"KeyReparseTag"
 	FileWriteLine($IndxEntriesReparseRCsvFile, $Indx_Csv_Header & @CRLF)
 EndFunc
