@@ -1,5 +1,8 @@
 Indx2Csv Changelog
 
+1.0.0.13
+Fixed a bug that caused some valid INDX data to be missed when system files contain zeroed filestamps. 
+
 1.0.0.12
 Added 2 new fields from INDX header into all output and db schema. Vcn and IsNotLeaf.
 Fixed bug that caused parsing to skip indx when LastLsn is 0.

@@ -4,7 +4,7 @@
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=Decode INDX records
 #AutoIt3Wrapper_Res_Description=Decode INDX records
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.12
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.13
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 ;Program assumes input file like IndxCarver creates.
@@ -30,7 +30,7 @@ Global $INDXsig = "494E4458", $INDX_Size = 4096, $BinaryFragment, $RegExPatternH
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $TimeDiff = 5748192000000000
 
-$Progversion = "Indx2Csv 1.0.0.12"
+$Progversion = "Indx2Csv 1.0.0.13"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -1133,14 +1133,17 @@ Func _ParseCoreValidData($InputData,$FirstEntryOffset)
 			Return $EntryCounter
 		EndIf
 
-		If $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0  And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal Then
+		If $MFTReferenceSeqNo > 0 And $MFTReferenceOfParent > 4 And $Indx_NameLength > 0 Then
+			If $MFTReference > 11 And ($Indx_CTime=$TimestampErrorVal Or $Indx_ATime=$TimestampErrorVal Or $Indx_MTime=$TimestampErrorVal Or $Indx_RTime=$TimestampErrorVal) Then
+				Return $EntryCounter
+			EndIf
 			FileWriteLine($IndxEntriesI30CsvFile, $RecordOffset & $de & $IndxCurrentVcn & $de & $IsNotLeafNode & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
 			$LocalOffset += $IndexEntryLength*2
 			$EntryCounter+=1
 			_ClearVar()
 			ContinueLoop
 		Else
-;			ConsoleWrite("Error: Validation of entry failed." & @CRLF)
+			;ConsoleWrite("Error: Validation of entry failed." & @CRLF)
 			Return $EntryCounter
 		EndIf
 		_ClearVar()
