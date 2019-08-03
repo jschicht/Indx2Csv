@@ -54,10 +54,18 @@ The output filename to write the fixed fragment to, if /VerifyFragment: is set t
 Boolean value for cleaning up all output if no entries could be decoded. Default value is 1. Can be 0 or 1. This setting makes the most sense if program is run in loop in batch or similar.
 /ScanMode:
 An integer indicating the depth level of scan mode. 0 is normal mode without any scanning and is the default value. 1 is light level scanning. 15 is deepest level
+/QuotationMark:
+Boolean value for activation of quotation mark surrounding all values in output.
+/OutputFormat:
+Format of the csv output. Can be all, l2t or bodyfile. Default is all.
+/StrictNameCheck:
+Boolean value for applying extended name check with I30 entries in slack. Useful for unicode mode with many false positives in slack. Default is 1. 
 
 Examples:
 Indx2Csv.exe /IndxFile:c:\temp\chunk.wfixups.INDX
 Indx2Csv.exe /IndxFile:c:\temp\chunk.wfixups.INDX /OutputPath:e:\temp
+Indx2Csv.exe /IndxFile:c:\temp\chunk.wfixups.INDX /OutputPath:e:\temp /OutputFormat:l2t
+Indx2Csv.exe /IndxFile:c:\temp\chunk.wfixups.INDX /OutputPath:e:\temp /Unicode:1 /StrictNameCheck:1
 Indx2Csv.exe /IndxFile:c:\temp\chunk.wfixups.INDX /TimeZone:2.00 /TSFormat:1 /TSPrecision:NanoSec /Unicode:1
 Indx2Csv.exe /IndxFile:c:\temp\chunk.wofixups.INDX /Fixups:0 /TimeZone:-5.00 /TSFormat:1 /TSPrecision:MilliSec
 Indx2Csv.exe /IndxFile:c:\temp\chunk.wofixups.INDX /Fixups:0 /TSFormat:1 /TSPrecision:MilliSec /Slack:1 /Unicode:0

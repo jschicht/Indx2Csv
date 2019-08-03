@@ -1,11 +1,17 @@
 #Region ;**** Directives created by AutoIt3Wrapper_GUI ****
 #AutoIt3Wrapper_Icon=C:\Program Files (x86)\AutoIt3\Icons\au3.ico
-#AutoIt3Wrapper_UseUpx=y
+#AutoIt3Wrapper_Outfile=Indx2Csv.exe
+#AutoIt3Wrapper_Outfile_x64=Indx2Csv64.exe
+#AutoIt3Wrapper_Compile_Both=y
+#AutoIt3Wrapper_UseX64=y
 #AutoIt3Wrapper_Change2CUI=y
 #AutoIt3Wrapper_Res_Comment=Decode INDX records
 #AutoIt3Wrapper_Res_Description=Decode INDX records
-#AutoIt3Wrapper_Res_Fileversion=1.0.0.13
+#AutoIt3Wrapper_Res_Fileversion=1.0.0.14
 #AutoIt3Wrapper_Res_LegalCopyright=Joakim Schicht
+#AutoIt3Wrapper_AU3Check_Parameters=-w 3 -w 5
+#AutoIt3Wrapper_Run_Au3Stripper=y
+#Au3Stripper_Parameters=/sf /sv /rm /pe
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
 ;Program assumes input file like IndxCarver creates.
 #Include <WinAPIEx.au3>
@@ -18,9 +24,9 @@
 #Include <FileConstants.au3>
 Global $de="|", $PrecisionSeparator=".", $PrecisionSeparator2="",$DateTimeFormat, $TimestampPrecision,$IndxEntriesI30CsvFile,$IndxEntriesI30Csv,$CurrentFileOffset,$UTCconfig,$myctredit,$SeparatorInput
 Global $TimestampErrorVal = "0000-00-00 00:00:00",$ExampleTimestampVal = "01CD74B3150770B8", $IndxEntriesObjIdOCsvFile, $IndxEntriesObjIdOCsv, $IndxEntriesReparseRCsvFile, $IndxEntriesReparseRCsv
-Global $DoDefaultAll, $dol2t, $DoBodyfile, $hDebugOutFile, $MaxRecords, $CurrentRecord, $WithQuotes, $EncodingWhenOpen = 2, $DoParseSlack=1, $DoFixups=1
+Global $DoDefaultAll, $Dol2t, $DoBodyfile, $hDebugOutFile, $MaxRecords, $CurrentRecord, $WithQuotes, $EncodingWhenOpen = 2, $DoParseSlack=1, $DoFixups=1
 Global $CheckSlack,$CheckFixups,$CheckUnicode,$checkquotes
-Global $begin, $ElapsedTime, $EntryCounter, $ScanMode, $SectorSize=512, $ExtendedNameCheckChar=1, $ExtendedNameCheckWindows=1, $ExtendedNameCheckAll=1, $ExtendedTimestampCheck=1
+Global $begin, $ElapsedTime, $EntryCounter, $ScanMode, $SectorSize=512, $ExtendedNameCheckChar=1, $ExtendedNameCheckWindows=1, $ExtendedNameCheckAll=1, $ExtendedTimestampCheck=1, $StrictNameCheck=1
 Global $ProgressStatus, $ProgressIndx, $IsNotLeafNode, $IndxCurrentVcn
 Global $RecordOffset,$IndxLastLsn,$FromIndxSlack,$MFTReference,$MFTReferenceSeqNo,$IndexFlags,$MFTReferenceOfParent,$MFTReferenceOfParentSeqNo
 Global $Indx_CTime,$Indx_ATime,$Indx_MTime,$Indx_RTime,$Indx_AllocSize,$Indx_RealSize,$Indx_File_Flags,$Indx_ReparseTag,$Indx_FileName,$Indx_NameSpace,$SubNodeVCN,$TextInformation
@@ -29,8 +35,11 @@ Global $_COMMON_KERNEL32DLL=DllOpen("kernel32.dll"),$outputpath=@ScriptDir,$Pars
 Global $INDXsig = "494E4458", $INDX_Size = 4096, $BinaryFragment, $RegExPatternHexNotNull = "[1-9a-fA-F]", $CleanUp=0, $VerifyFragment=0, $OutFragmentName="OutFragment.bin", $RebuiltFragment
 Global $tDelta = _WinTime_GetUTCToLocalFileTimeDelta()
 Global $TimeDiff = 5748192000000000
+Global $TSCheckLow  = 112589990684262400 ;1957-10-14
+Global $TSCheckHigh = 139611588448485376 ;2043-05-31
+Global $CharsToGrabDate, $CharStartTime, $CharsToGrabTime
 
-$Progversion = "Indx2Csv 1.0.0.13"
+$Progversion = "Indx2Csv 1.0.0.14"
 If $cmdline[0] > 0 Then
 	$CommandlineMode = 1
 	ConsoleWrite($Progversion & @CRLF)
@@ -67,21 +76,25 @@ Else
 	$CheckUnicode = GUICtrlCreateCheckbox("Unicode", 255, 70, 60, 20)
 	GUICtrlSetState($CheckUnicode, $GUI_UNCHECKED)
 	$CheckSlack = GUICtrlCreateCheckbox("Slack", 320, 70, 60, 20)
-	GUICtrlSetState($CheckSlack, $GUI_UNCHECKED)
+	GUICtrlSetState($CheckSlack, $GUI_CHECKED)
+	GUICtrlSetState($CheckSlack, $GUI_DISABLE)
 	$CheckFixups = GUICtrlCreateCheckbox("Apply fixups", 320, 95, 75, 20)
 	GUICtrlSetState($CheckFixups, $GUI_CHECKED)
 	;$CheckCleanUp = GUICtrlCreateCheckbox("CleanUp", 320, 120, 75, 20)
 	;GUICtrlSetState($CheckCleanUp, $GUI_UNCHECKED)
 
-	$checkl2t = GUICtrlCreateCheckbox("log2timeline", 20, 100, 130, 20)
-	GUICtrlSetState($checkl2t, $GUI_UNCHECKED)
-	GUICtrlSetState($checkl2t, $GUI_DISABLE)
-	$checkbodyfile = GUICtrlCreateCheckbox("bodyfile", 20, 120, 130, 20)
-	GUICtrlSetState($checkbodyfile, $GUI_UNCHECKED)
-	GUICtrlSetState($checkbodyfile, $GUI_DISABLE)
-	$checkdefaultall = GUICtrlCreateCheckbox("dump everything", 20, 140, 130, 20)
-	GUICtrlSetState($checkdefaultall, $GUI_CHECKED)
-	GUICtrlSetState($checkdefaultall, $GUI_DISABLE)
+	$checkl2t = GUICtrlCreateRadio("log2timeline", 20, 100, 110, 20)
+	;$checkl2t = GUICtrlCreateCheckbox("log2timeline", 20, 100, 130, 20)
+	;GUICtrlSetState($checkl2t, $GUI_UNCHECKED)
+	;GUICtrlSetState($checkl2t, $GUI_DISABLE)
+	$checkbodyfile = GUICtrlCreateRadio("bodyfile", 20, 120, 100, 20)
+	;$checkbodyfile = GUICtrlCreateCheckbox("bodyfile", 20, 120, 130, 20)
+	;GUICtrlSetState($checkbodyfile, $GUI_UNCHECKED)
+	;GUICtrlSetState($checkbodyfile, $GUI_DISABLE)
+	$checkdefaultall = GUICtrlCreateRadio("dump everything", 20, 140, 110, 20)
+	;$checkdefaultall = GUICtrlCreateCheckbox("dump everything", 20, 140, 130, 20)
+	;GUICtrlSetState($checkdefaultall, $GUI_CHECKED)
+	;GUICtrlSetState($checkdefaultall, $GUI_DISABLE)
 
 	$ComboScanMode = GUICtrlCreateCombo("", 200, 100, 35, 20)
 	$LabelScanMode = GUICtrlCreateLabel("Scan mode:",130,100,60,20)
@@ -127,6 +140,9 @@ Else
 				If Not @error Then _DisplayInfo("Input: " & $BinaryFragment & @CRLF)
 			Case $nMsg = $ButtonStart
 				_Main()
+				GUICtrlSetState($checkl2t, $GUI_UNCHECKED)
+				GUICtrlSetState($checkbodyfile, $GUI_UNCHECKED)
+				GUICtrlSetState($checkdefaultall, $GUI_UNCHECKED)
 			Case $nMsg = $GUI_EVENT_CLOSE
 				Exit
 		EndSelect
@@ -209,13 +225,18 @@ Func _Main()
 	_DumpOutput("Csv: " & $IndxEntriesI30CsvFile & @CRLF)
 	_DumpOutput("Csv: " & $IndxEntriesObjIdOCsvFile & @CRLF)
 	_DumpOutput("Csv: " & $IndxEntriesReparseRCsvFile & @CRLF)
+	_DumpOutput("StrictNameCheck: " & $StrictNameCheck & @CRLF)
 
 ;---------------------
+
 	If Not $CommandlineMode Then
 		If Int(GUICtrlRead($checkl2t) + GUICtrlRead($checkbodyfile) + GUICtrlRead($checkdefaultall)) <> 9 Then
-			_DisplayInfo("Error: Output format can only be one of the options (not more than 1)." & @CRLF)
+			_DisplayInfo("Error: Output format must be set to 1 of the 3 options." & @CRLF)
 			Return
 		EndIf
+		$Dol2t = False
+		$DoBodyfile = False
+		$DoDefaultAll = False
 		If GUICtrlRead($checkl2t) = 1 Then
 			$Dol2t = True
 		ElseIf GUICtrlRead($checkbodyfile) = 1 Then
@@ -223,6 +244,19 @@ Func _Main()
 		ElseIf GUICtrlRead($checkdefaultall) = 1 Then
 			$DoDefaultAll = True
 		EndIf
+	EndIf
+
+	If Not $CommandlineMode Then
+		If ($DateTimeFormat = 4 Or $DateTimeFormat = 5) And ($Dol2t Or $DoBodyfile) Then
+			_DisplayInfo("Error: Timestamp format can't be 4 or 5 in combination with OutputFormat log2timeline and bodyfile" & @CRLF)
+			Return
+		EndIf
+	EndIf
+
+	If Not $CommandlineMode Then
+		$de = GUICtrlRead($SeparatorInput)
+	Else
+		$de = $SeparatorInput
 	EndIf
 
 	If Not $CommandlineMode Then
@@ -312,7 +346,119 @@ Func _Main()
 	If Not $CommandlineMode Then
 		$ScanMode = GUICtrlRead($ComboScanMode)
 	EndIf
+	;----------------------------------------
+	Select
+		Case $DoDefaultAll
+			_DumpOutput("OutputFormat: all" & @CRLF)
+			$IndxI30SqlFile = $ParserOutDir & "\Indx_I30_Entries_"&$TimestampStart&".sql"
+			$IndxObjectIdSqlFile = $OutputPath & "\Indx_ObjIdO_Entries_"&$TimestampStart&".sql"
+			$IndxReparseRSqlFile = $OutputPath & "\Indx_ReparseR_Entries_"&$TimestampStart&".sql"
+		Case $Dol2t
+			_DumpOutput("OutputFormat: log2timeline" & @CRLF)
+			$IndxI30SqlFile = $ParserOutDir & "\Indx_I30_Entries_l2t_"&$TimestampStart&".sql"
+			$IndxObjectIdSqlFile = $OutputPath & "\Indx_ObjIdO_Entries_l2t_"&$TimestampStart&".sql"
+			$IndxReparseRSqlFile = $OutputPath & "\Indx_ReparseR_Entries_l2t_"&$TimestampStart&".sql"
+		Case $DoBodyfile
+			_DumpOutput("OutputFormat: bodyfile" & @CRLF)
+			$IndxI30SqlFile = $ParserOutDir & "\Indx_I30_Entries_bodyfile_"&$TimestampStart&".sql"
+			$IndxObjectIdSqlFile = $OutputPath & "\Indx_ObjIdO_Entries_bodyfile_"&$TimestampStart&".sql"
+			$IndxReparseRSqlFile = $OutputPath & "\Indx_ReparseR_Entries_bodyfile_"&$TimestampStart&".sql"
+	EndSelect
 
+	Select
+		Case $DoDefaultAll
+			FileInstall(".\import-sql\import-csv-INDX-I30.sql", $IndxI30SqlFile)
+			FileInstall(".\import-sql\import-csv-INDX-objido.sql", $IndxObjectIdSqlFile)
+			FileInstall(".\import-sql\import-csv-INDX-reparser.sql", $IndxReparseRSqlFile)
+		Case $Dol2t
+			FileInstall(".\import-sql\import-csv-l2t-INDX.sql", $IndxI30SqlFile)
+		Case $DoBodyfile
+			FileInstall(".\import-sql\import-csv-bodyfile-INDX.sql", $IndxI30SqlFile)
+	EndSelect
+
+	$FixedPath = StringReplace($IndxEntriesI30CsvFile, "\","\\")
+	Sleep(500)
+	_ReplaceStringInFile($IndxI30SqlFile, "__PathToCsv__", $FixedPath)
+	If $TestUnicode = 1 Then _ReplaceStringInFile($IndxI30SqlFile, "latin1", "utf8")
+	_ReplaceStringInFile($IndxI30SqlFile, "__Separator__", $de)
+
+	$FixedPath = StringReplace($IndxEntriesObjIdOCsvFile,"\","\\")
+	Sleep(500)
+	_ReplaceStringInFile($IndxObjectIdSqlFile,"__PathToCsv__",$FixedPath)
+	If $CheckUnicode = 1 Then _ReplaceStringInFile($IndxObjectIdSqlFile,"latin1", "utf8")
+	_ReplaceStringInFile($IndxObjectIdSqlFile, "__Separator__", $de)
+
+	$FixedPath = StringReplace($IndxEntriesReparseRCsvFile,"\","\\")
+	Sleep(500)
+	_ReplaceStringInFile($IndxReparseRSqlFile,"__PathToCsv__",$FixedPath)
+	If $CheckUnicode = 1 Then _ReplaceStringInFile($IndxReparseRSqlFile,"latin1", "utf8")
+	_ReplaceStringInFile($IndxReparseRSqlFile, "__Separator__", $de)
+
+	_SetDateTimeFormats()
+
+	Local $TSPrecisionFormatTransform = ""
+	If $TimestampPrecision > 1 Then
+		$TSPrecisionFormatTransform = $PrecisionSeparator & "%f"
+	EndIf
+
+	Local $TimestampFormatTransform
+	If $DoDefaultAll Or $DoBodyfile Then
+		;INDX or bodyfile table
+
+
+		Select
+			Case $DateTimeFormat = 1
+				$TimestampFormatTransform = "%Y%m%d%H%i%s" & $TSPrecisionFormatTransform
+			Case $DateTimeFormat = 2
+				$TimestampFormatTransform = "%m/%d/%Y %H:%i:%s" & $TSPrecisionFormatTransform
+			Case $DateTimeFormat = 3
+				$TimestampFormatTransform = "%d/%m/%Y %H:%i:%s" & $TSPrecisionFormatTransform
+			Case $DateTimeFormat = 4 Or $DateTimeFormat = 5
+				If $CommandlineMode Then
+					ConsoleWrite("WARNING: Loading of sql into database with TSFormat 4 or 5 is not yet supported." & @CRLF)
+				Else
+					_DumpOutput("WARNING: Loading of sql into database with TSFormat 4 or 5 is not yet supported." & @CRLF)
+				EndIf
+			Case $DateTimeFormat = 6
+				$TimestampFormatTransform = "%Y-%m-%d %H:%i:%s" & $TSPrecisionFormatTransform
+		EndSelect
+		_ReplaceStringInFile($IndxI30SqlFile, "__TimestampTransformationSyntax__", $TimestampFormatTransform)
+		_ReplaceStringInFile($IndxObjectIdSqlFile, "__TimestampTransformationSyntax__", $TimestampFormatTransform)
+		_ReplaceStringInFile($IndxReparseRSqlFile, "__TimestampTransformationSyntax__", $TimestampFormatTransform)
+	EndIf
+
+	Local $DateFormatTransform, $TimeFormatTransform
+	If $Dol2t Then
+		;log2timeline table
+		Select
+			Case $DateTimeFormat = 1
+				$DateFormatTransform = "%Y%m%d"
+				$TimeFormatTransform = "%H%i%s"
+			Case $DateTimeFormat = 2
+				$DateFormatTransform = "%m/%d/%Y"
+				$TimeFormatTransform = "%H:%i:%s"
+			Case $DateTimeFormat = 3
+				$DateFormatTransform = "%d/%m/%Y"
+				$TimeFormatTransform = "%H:%i:%s"
+			Case $DateTimeFormat = 4 Or $DateTimeFormat = 5
+				If $CommandlineMode Then
+					ConsoleWrite("WARNING: Loading of sql into database with TSFormat 4 or 5 is not yet supported." & @CRLF)
+				Else
+					_DumpOutput("WARNING: Loading of sql into database with TSFormat 4 or 5 is not yet supported." & @CRLF)
+				EndIf
+			Case $DateTimeFormat = 6
+				$DateFormatTransform = "%Y-%m-%d"
+				$TimeFormatTransform = "%H:%i:%s"
+		EndSelect
+		_ReplaceStringInFile($IndxI30SqlFile, "__DateTransformationSyntax__", $DateFormatTransform)
+		_ReplaceStringInFile($IndxI30SqlFile, "__TimeTransformationSyntax__", $TimeFormatTransform)
+		_ReplaceStringInFile($IndxObjectIdSqlFile, "__DateTransformationSyntax__", $DateFormatTransform)
+		_ReplaceStringInFile($IndxObjectIdSqlFile, "__TimeTransformationSyntax__", $TimeFormatTransform)
+		_ReplaceStringInFile($IndxReparseRSqlFile, "__DateTransformationSyntax__", $DateFormatTransform)
+		_ReplaceStringInFile($IndxReparseRSqlFile, "__TimeTransformationSyntax__", $TimeFormatTransform)
+	EndIf
+	;--------------------------
+	#cs
 	$IndxI30SqlFile = $ParserOutDir & "\Indx_I30_Entries_" & $TimestampStart & ".sql"
 	FileInstall(".\import-sql\import-csv-INDX-I30.sql", $IndxI30SqlFile)
 	$FixedPath = StringReplace($IndxEntriesI30CsvFile,"\","\\")
@@ -333,7 +479,7 @@ Func _Main()
 	Sleep(500)
 	_ReplaceStringInFile($IndxReparseRSqlFile,"__PathToCsv__",$FixedPath)
 	If $CheckUnicode = 1 Then _ReplaceStringInFile($IndxReparseRSqlFile,"latin1", "utf8")
-
+	#ce
 	_DumpOutput("Scan mode: " & $ScanMode & @CRLF)
 ;----------------------------
 
@@ -377,7 +523,7 @@ Func _Main()
 			$MaxPages = Ceiling($InputFileSize/($ChunkSize))
 			For $i = 0 To $MaxPages-1
 ;				ConsoleWrite("$i: " & $i & @CRLF)
-				$CurrentPage=$i
+				;$CurrentPage=$i
 				_WinAPI_SetFilePointerEx($hFile, $i*($ChunkSize), $FILE_BEGIN)
 				If $i = $MaxPages-1 Then $tBuffer = DllStructCreate("byte[" & ($ChunkSize)+$SectorSize & "]")
 				_WinAPI_ReadFile($hFile, DllStructGetPtr($tBuffer), ($ChunkSize)+$SectorSize, $nBytes)
@@ -547,21 +693,21 @@ Func _ScanModeI30DecodeEntry($Record)
 	$CTime_Timestamp = StringMid($Record,49,16)
 	If $ExtendedTimestampCheck Then
 		$CTime_TimestampTmp = Dec(_SwapEndian($CTime_Timestamp),2)
-		If $CTime_TimestampTmp < 112589990684262400 Or $CTime_TimestampTmp > 139611588448485376 Then Return SetError(9,0,0) ;14 oktober 1957 - 31 mai 2043
+		If $CTime_TimestampTmp < $TSCheckLow Or $CTime_TimestampTmp > $TSCheckHigh Then Return SetError(9,0,0) ;14 oktober 1957 - 31 mai 2043
 	EndIf
 	$CTime_Timestamp = _DecodeTimestamp($CTime_Timestamp)
 	If $CTime_Timestamp = $TimestampErrorVal Then Return SetError(10,0,0)
 	$ATime_Timestamp = StringMid($Record,65,16)
 	If $ExtendedTimestampCheck Then
 		$ATime_TimestampTmp = Dec(_SwapEndian($ATime_Timestamp),2)
-		If $ATime_TimestampTmp < 112589990684262400 Or $ATime_TimestampTmp > 139611588448485376 Then Return SetError(11,0,0) ;14 oktober 1957 - 31 mai 2043
+		If $ATime_TimestampTmp < $TSCheckLow Or $ATime_TimestampTmp > $TSCheckHigh Then Return SetError(11,0,0) ;14 oktober 1957 - 31 mai 2043
 	EndIf
 	$ATime_Timestamp = _DecodeTimestamp($ATime_Timestamp)
 	If $ATime_Timestamp = $TimestampErrorVal Then Return SetError(12,0,0)
 	$MTime_Timestamp = StringMid($Record,81,16)
 	If $ExtendedTimestampCheck Then
-		$MTime_TimestampTmp = Dec(_SwapEndian($MTime_Timestamp),2)
-		;If $MTime_TimestampTmp < 112589990684262400 Or $MTime_TimestampTmp > 139611588448485376 Then Return SetError(13,0,0) ;14 oktober 1957 - 31 mai 2043
+		;$MTime_TimestampTmp = Dec(_SwapEndian($MTime_Timestamp),2)
+		;If $MTime_TimestampTmp < $TSCheckLow Or $MTime_TimestampTmp > $TSCheckHigh Then Return SetError(13,0,0) ;14 oktober 1957 - 31 mai 2043
 	EndIf
 	$MTime_Timestamp = _DecodeTimestamp($MTime_Timestamp)
 	;-----------------------
@@ -570,7 +716,7 @@ Func _ScanModeI30DecodeEntry($Record)
 	$RTime_Timestamp = StringMid($Record,97,16)
 	If $ExtendedTimestampCheck Then
 		$RTime_TimestampTmp = Dec(_SwapEndian($RTime_Timestamp),2)
-		If $RTime_TimestampTmp < 112589990684262400 Or $RTime_TimestampTmp > 139611588448485376 Then Return SetError(15,0,0) ;14 oktober 1957 - 31 mai 2043
+		If $RTime_TimestampTmp < $TSCheckLow Or $RTime_TimestampTmp > $TSCheckHigh Then Return SetError(15,0,0) ;14 oktober 1957 - 31 mai 2043
 	EndIf
 	$RTime_Timestamp = _DecodeTimestamp($RTime_Timestamp)
 	If $RTime_Timestamp = $TimestampErrorVal Then Return SetError(16,0,0)
@@ -735,7 +881,7 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 	$Indx_CTime = _SwapEndian($Indx_CTime)
 	If $ExtendedTimestampCheck Then
 		$CTime_TimestampTmp = Dec($Indx_CTime,2)
-		If $CTime_TimestampTmp < 112589990684262400 Or $CTime_TimestampTmp > 139611588448485376 Then ;14 oktober 1957 - 31 mai 2043
+		If $CTime_TimestampTmp < $TSCheckLow Or $CTime_TimestampTmp > $TSCheckHigh Then ;14 oktober 1957 - 31 mai 2043
 			If $ScanMode < 6 Then Return SetError(9,0,0)
 			If $TextInformation = "" Then $TextInformation &= ";MftRef;MftRefSeqNo;IndexEntryLength;OffsetToFileName;IndexFlags;Padding;MFTReferenceOfParent;MFTReferenceOfParentSeqNo"
 			$TextInformation &= ";CTime"
@@ -746,14 +892,14 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 	If @error Then
 		$Indx_CTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
-		$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-4)
-		$Indx_CTime_Precision = StringRight($Indx_CTime,3)
+		;$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-4)
+		;$Indx_CTime_Precision = StringRight($Indx_CTime,3)
 	ElseIf $TimestampPrecision = 3 Then
 		$Indx_CTime = $Indx_CTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_CTime_tmp, 4))
-		$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-9)
-		$Indx_CTime_Precision = StringRight($Indx_CTime,8)
+		;$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-9)
+		;$Indx_CTime_Precision = StringRight($Indx_CTime,8)
 	Else
-		$Indx_CTime_Core = $Indx_CTime
+		;$Indx_CTime_Core = $Indx_CTime
 	EndIf
 	If $Indx_CTime = $TimestampErrorVal Then
 		If $ScanMode < 6 Then Return SetError(10,0,0)
@@ -765,7 +911,7 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 	$Indx_ATime = _SwapEndian($Indx_ATime)
 	If $ExtendedTimestampCheck Then
 		$ATime_TimestampTmp = Dec($Indx_ATime,2)
-		If $ATime_TimestampTmp < 112589990684262400 Or $ATime_TimestampTmp > 139611588448485376 Then ;14 oktober 1957 - 31 mai 2043
+		If $ATime_TimestampTmp < $TSCheckLow Or $ATime_TimestampTmp > $TSCheckHigh Then ;14 oktober 1957 - 31 mai 2043
 			If $ScanMode < 7 Then Return SetError(11,0,0)
 			If $TextInformation = "" Then $TextInformation &= ";MftRef;MftRefSeqNo;IndexEntryLength;OffsetToFileName;IndexFlags;Padding;MFTReferenceOfParent;MFTReferenceOfParentSeqNo;CTime"
 			$TextInformation &= ";ATime"
@@ -776,14 +922,14 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 	If @error Then
 		$Indx_ATime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
-		$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-4)
-		$Indx_ATime_Precision = StringRight($Indx_ATime,3)
+		;$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-4)
+		;$Indx_ATime_Precision = StringRight($Indx_ATime,3)
 	ElseIf $TimestampPrecision = 3 Then
 		$Indx_ATime = $Indx_ATime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_ATime_tmp, 4))
-		$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-9)
-		$Indx_ATime_Precision = StringRight($Indx_ATime,8)
+		;$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-9)
+		;$Indx_ATime_Precision = StringRight($Indx_ATime,8)
 	Else
-		$Indx_ATime_Core = $Indx_ATime
+		;$Indx_ATime_Core = $Indx_ATime
 	EndIf
 	If $Indx_ATime = $TimestampErrorVal Then
 		If $ScanMode < 7 Then Return SetError(12,0,0)
@@ -795,7 +941,7 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 	$Indx_MTime = _SwapEndian($Indx_MTime)
 	If $ExtendedTimestampCheck Then
 		$MTime_TimestampTmp = Dec($Indx_MTime,2)
-		If $MTime_TimestampTmp < 112589990684262400 Or $MTime_TimestampTmp > 139611588448485376 Then ;14 oktober 1957 - 31 mai 2043
+		If $MTime_TimestampTmp < $TSCheckLow Or $MTime_TimestampTmp > $TSCheckHigh Then ;14 oktober 1957 - 31 mai 2043
 			If $ScanMode < 8 Then Return SetError(13,0,0)
 			$TextInformation &= ";MTime"
 		EndIf
@@ -805,14 +951,14 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 	If @error Then
 		$Indx_MTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
-		$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-4)
-		$Indx_MTime_Precision = StringRight($Indx_MTime,3)
+		;$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-4)
+		;$Indx_MTime_Precision = StringRight($Indx_MTime,3)
 	ElseIf $TimestampPrecision = 3 Then
 		$Indx_MTime = $Indx_MTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_MTime_tmp, 4))
-		$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-9)
-		$Indx_MTime_Precision = StringRight($Indx_MTime,8)
+		;$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-9)
+		;$Indx_MTime_Precision = StringRight($Indx_MTime,8)
 	Else
-		$Indx_MTime_Core = $Indx_MTime
+		;$Indx_MTime_Core = $Indx_MTime
 	EndIf
 	If $Indx_MTime = $TimestampErrorVal Then
 		If $ScanMode < 8 Then Return SetError(14,0,0)
@@ -823,7 +969,7 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 	$Indx_RTime = _SwapEndian($Indx_RTime)
 	If $ExtendedTimestampCheck Then
 		$RTime_TimestampTmp = Dec($Indx_RTime,2)
-		If $RTime_TimestampTmp < 112589990684262400 Or $RTime_TimestampTmp > 139611588448485376 Then ;14 oktober 1957 - 31 mai 2043
+		If $RTime_TimestampTmp < $TSCheckLow Or $RTime_TimestampTmp > $TSCheckHigh Then ;14 oktober 1957 - 31 mai 2043
 			If $ScanMode < 9 Then Return SetError(15,0,0)
 			$TextInformation &= ";RTime"
 		EndIf
@@ -833,14 +979,14 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 	If @error Then
 		$Indx_RTime = $TimestampErrorVal
 	ElseIf $TimestampPrecision = 2 Then
-		$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-4)
-		$Indx_RTime_Precision = StringRight($Indx_RTime,3)
+		;$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-4)
+		;$Indx_RTime_Precision = StringRight($Indx_RTime,3)
 	ElseIf $TimestampPrecision = 3 Then
 		$Indx_RTime = $Indx_RTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_RTime_tmp, 4))
-		$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-9)
-		$Indx_RTime_Precision = StringRight($Indx_RTime,8)
+		;$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-9)
+		;$Indx_RTime_Precision = StringRight($Indx_RTime,8)
 	Else
-		$Indx_RTime_Core = $Indx_RTime
+		;$Indx_RTime_Core = $Indx_RTime
 	EndIf
 	If $Indx_RTime = $TimestampErrorVal Then
 		If $ScanMode < 9 Then Return SetError(16,0,0)
@@ -975,12 +1121,65 @@ Func _NormalModeI30DecodeEntry($InputData, $OffsetRecord)
 			ConsoleWrite("Output fragment verified and written to: " & $ParserOutDir & "\" & $OutFragmentName & @CRLF)
 		EndIf
 	EndIf
-	If Not $CleanUp Then FileWriteLine($IndxEntriesI30CsvFile, $RecordOffset & $de & $IndxCurrentVcn & $de & $IsNotLeafNode & $de & $IndxLastLsn & $de & 1 & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
+	Local $TextString=""
+	If Not $DoDefaultAll Then
+		$TextString &= " IndxLastLsn:" & $IndxLastLsn
+		$TextString &= " IndexFlags:" & $IndexFlags
+		$TextString &= " MftRefOfParent:" & $MFTReferenceOfParent
+		$TextString &= " MftRefOfParentSeqNo:" & $MFTReferenceOfParentSeqNo
+		$TextString &= " AllocSize:" & $Indx_AllocSize
+		$TextString &= " RealSize:" & $Indx_RealSize
+		$TextString &= " File_Flags:" & $Indx_File_Flags
+		$TextString &= " ReparseTag:" & $Indx_ReparseTag
+		$TextString &= " EaSize:" & $Indx_EaSize
+		If $TextInformation <> "" Then
+			$TextString &= " CorruptEntries:" & $TextInformation
+		EndIf
+	EndIf
+
+	If $WithQuotes Then
+		Select
+			Case $DoDefaultAll
+				FileWriteLine($IndxEntriesI30CsvFile, '"'&$RecordOffset&'"' & $de & '"'&$IndxCurrentVcn&'"' & $de & '"'&$IsNotLeafNode&'"' & $de & '"'&$IndxLastLsn&'"' & $de & '"'&1&'"' & $de & '"'&$Indx_FileName&'"' & $de & '"'&$MFTReference&'"' & $de & '"'&$MFTReferenceSeqNo&'"' & $de & '"'&$IndexFlags&'"' & $de & '"'&$MFTReferenceOfParent&'"' & $de & '"'&$MFTReferenceOfParentSeqNo&'"' & $de & '"'&$Indx_CTime&'"' & $de & '"'&$Indx_ATime&'"' & $de & '"'&$Indx_MTime&'"' & $de & '"'&$Indx_RTime&'"' & $de & '"'&$Indx_AllocSize&'"' & $de & '"'&$Indx_RealSize&'"' & $de & '"'&$Indx_File_Flags&'"' & $de & '"'&$Indx_ReparseTag&'"' & $de & '"'&$Indx_EaSize&'"' & $de & '"'&$Indx_NameSpace&'"' & $de & '"'&$SubNodeVCN&'"' & $de & '"'&$TextInformation&'"' & @crlf)
+			Case $Dol2t
+				FileWriteLine($IndxEntriesI30CsvFile, '"'&'"'& StringLeft($Indx_CTime,$CharsToGrabDate) &'"' & $de & '"'& StringMid($Indx_CTime,$CharStartTime,$CharsToGrabTime) &'"' & $de & '"'& $UTCconfig &'"' & $de & '"'&"C"&'"' & $de & '"'&"INDX"&'"' & $de & '"'&"I30"&'"' & $de & '"'& "" &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& $Indx_FileName &'"' & $de & '"'&$MFTReference&'"' & $de & '"'&"Offset:"&$RecordOffset&" Slack:" & 1 & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString&'"' & $de & '""' & $de & '""' & @CRLF)
+				FileWriteLine($IndxEntriesI30CsvFile, '"'&'"'& StringLeft($Indx_ATime,$CharsToGrabDate) &'"' & $de & '"'& StringMid($Indx_ATime,$CharStartTime,$CharsToGrabTime) &'"' & $de & '"'& $UTCconfig &'"' & $de & '"'&"A"&'"' & $de & '"'&"INDX"&'"' & $de & '"'&"I30"&'"' & $de & '"'& "" &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& $Indx_FileName &'"' & $de & '"'&$MFTReference&'"' & $de & '"'&"Offset:"&$RecordOffset&" Slack:" & 1 & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString&'"' & $de & '""' & $de & '""' & @CRLF)
+				FileWriteLine($IndxEntriesI30CsvFile, '"'&'"'& StringLeft($Indx_MTime,$CharsToGrabDate) &'"' & $de & '"'& StringMid($Indx_MTime,$CharStartTime,$CharsToGrabTime) &'"' & $de & '"'& $UTCconfig &'"' & $de & '"'&"M"&'"' & $de & '"'&"INDX"&'"' & $de & '"'&"I30"&'"' & $de & '"'& "" &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& $Indx_FileName &'"' & $de & '"'&$MFTReference&'"' & $de & '"'&"Offset:"&$RecordOffset&" Slack:" & 1 & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString&'"' & $de & '""' & $de & '""' & @CRLF)
+				FileWriteLine($IndxEntriesI30CsvFile, '"'&'"'& StringLeft($Indx_RTime,$CharsToGrabDate) &'"' & $de & '"'& StringMid($Indx_RTime,$CharStartTime,$CharsToGrabTime) &'"' & $de & '"'& $UTCconfig &'"' & $de & '"'&"R"&'"' & $de & '"'&"INDX"&'"' & $de & '"'&"I30"&'"' & $de & '"'& "" &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& $Indx_FileName &'"' & $de & '"'&$MFTReference&'"' & $de & '"'&"Offset:"&$RecordOffset&" Slack:" & 1 & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString&'"' & $de & '""' & $de & '""' & @CRLF)
+			Case $DoBodyfile
+				FileWriteLine($IndxEntriesI30CsvFile, '""' & $de & '"'& "I30" &'"' & $de & '"'&$MFTReference&'"' & $de & '"'& "Offset:"&$RecordOffset&" Slack:" & 1 & " FileName:"&$Indx_FileName& " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& $Indx_ATime &'"' & $de & '"'& $Indx_MTime &'"' & $de & '"'& $Indx_CTime &'"' & $de & '"'& $Indx_RTime &'"' & @CRLF)
+		EndSelect
+	Else
+		Select
+			Case $DoDefaultAll
+				FileWriteLine($IndxEntriesI30CsvFile, $RecordOffset & $de & $IndxCurrentVcn & $de & $IsNotLeafNode & $de & $IndxLastLsn & $de & 1 & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
+			Case $Dol2t
+				FileWriteLine($IndxEntriesI30CsvFile, StringLeft($Indx_CTime,$CharsToGrabDate) & $de & StringMid($Indx_CTime,$CharStartTime,$CharsToGrabTime) & $de & $UTCconfig & $de & "C" & $de & "INDX" & $de & "I30" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & $Indx_FileName & $de & $MFTReference & $de & "Offset:"&$RecordOffset&" Slack:" & 1 & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString & $de & "" & $de & "" & @CRLF)
+				FileWriteLine($IndxEntriesI30CsvFile, StringLeft($Indx_ATime,$CharsToGrabDate) & $de & StringMid($Indx_ATime,$CharStartTime,$CharsToGrabTime) & $de & $UTCconfig & $de & "A" & $de & "INDX" & $de & "I30" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & $Indx_FileName & $de & $MFTReference & $de & "Offset:"&$RecordOffset&" Slack:" & 1 & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString & $de & "" & $de & "" & @CRLF)
+				FileWriteLine($IndxEntriesI30CsvFile, StringLeft($Indx_MTime,$CharsToGrabDate) & $de & StringMid($Indx_MTime,$CharStartTime,$CharsToGrabTime) & $de & $UTCconfig & $de & "M" & $de & "INDX" & $de & "I30" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & $Indx_FileName & $de & $MFTReference & $de & "Offset:"&$RecordOffset&" Slack:" & 1 & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString & $de & "" & $de & "" & @CRLF)
+				FileWriteLine($IndxEntriesI30CsvFile, StringLeft($Indx_RTime,$CharsToGrabDate) & $de & StringMid($Indx_RTime,$CharStartTime,$CharsToGrabTime) & $de & $UTCconfig & $de & "R" & $de & "INDX" & $de & "I30" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & $Indx_FileName & $de & $MFTReference & $de & "Offset:"&$RecordOffset&" Slack:" & 1 & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString & $de & "" & $de & "" & @CRLF)
+			Case $DoBodyfile
+				FileWriteLine($IndxEntriesI30CsvFile, "" & $de & "I30" & $de & $MFTReference & $de & "Offset:"&$RecordOffset&" Slack:" & 1 & " FileName:"&$Indx_FileName& " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString & $de & "" & $de & "" & $de & "" & $de &  $Indx_ATime  & $de &  $Indx_MTime  & $de &  $Indx_CTime  & $de &  $Indx_RTime  & @CRLF)
+		EndSelect
+	EndIf
+
 	Return 1
 EndFunc
 
 Func _WriteCSVHeaderIndxEntries()
-	$Indx_Csv_Header = "Offset"&$de&"Vcn"&$de&"IsNotLeaf"&$de&"LastLsn"&$de&"FromIndxSlack"&$de&"FileName"&$de&"MFTReference"&$de&"MFTReferenceSeqNo"&$de&"IndexFlags"&$de&"MFTParentReference"&$de&"MFTParentReferenceSeqNo"&$de&"CTime"&$de&"ATime"&$de&"MTime"&$de&"RTime"&$de&"AllocSize"&$de&"RealSize"&$de&"FileFlags"&$de&"ReparseTag"&$de&"EaSize"&$de&"NameSpace"&$de&"SubNodeVCN"&$de&"CorruptEntries"
+	Local $a
+	If $WithQuotes Then
+		$a = '"'
+	Else
+		$a = ""
+	EndIf
+	If $DoDefaultAll Then
+		$Indx_Csv_Header = $a&"Offset"&$a&$de&$a&"Vcn"&$a&$de&$a&"IsNotLeaf"&$a&$de&$a&"LastLsn"&$a&$de&$a&"FromIndxSlack"&$a&$de&$a&"FileName"&$a&$de&$a&"MFTReference"&$a&$de&$a&"MFTReferenceSeqNo"&$a&$de&$a&"IndexFlags"&$a&$de&$a&"MFTParentReference"&$a&$de&$a&"MFTParentReferenceSeqNo"&$a&$de&$a&"CTime"&$a&$de&$a&"ATime"&$a&$de&$a&"MTime"&$a&$de&$a&"RTime"&$a&$de&$a&"AllocSize"&$a&$de&$a&"RealSize"&$a&$de&$a&"FileFlags"&$a&$de&$a&"ReparseTag"&$a&$de&$a&"EaSize"&$a&$de&$a&"NameSpace"&$a&$de&$a&"SubNodeVCN"&$a&$de&$a&"CorruptEntries"&$a
+	ElseIf $Dol2t Then
+		$Indx_Csv_Header = $a&"Date"&$a&$de&$a&"Time"&$a&$de&$a&"Timezone"&$a&$de&$a&"MACB"&$a&$de&$a&"Source"&$a&$de&$a&"SourceType"&$a&$de&$a&"Type"&$a&$de&$a&"User"&$a&$de&$a&"Host"&$a&$de&$a&"Short"&$a&$de&$a&"Desc"&$a&$de&$a&"Version"&$a&$de&$a&"Filename"&$a&$de&$a&"Inode"&$a&$de&$a&"Notes"&$a&$de&$a&"Format"&$a&$de&$a&"Extra"&$a
+	ElseIf $DoBodyfile Then
+		$Indx_Csv_Header = $a&"MD5"&$a&$de&$a&"name"&$a&$de&$a&"inode"&$a&$de&$a&"mode_as_string"&$a&$de&$a&"UID"&$a&$de&$a&"GID"&$a&$de&$a&"size"&$a&$de&$a&"atime"&$a&$de&$a&"mtime"&$a&$de&$a&"ctime"&$a&$de&$a&"crtime"&$a
+	EndIf
 	FileWriteLine($IndxEntriesI30CsvFile, $Indx_Csv_Header & @CRLF)
 EndFunc
 
@@ -1003,7 +1202,7 @@ Func _ParseCoreValidData($InputData,$FirstEntryOffset)
 		$OffsetToFileName = Dec(_SwapEndian($OffsetToFileName),2)
 		$IndexFlags = StringMid($InputData,$LocalOffset+24,4)
 		$IndexFlags = Dec(_SwapEndian($IndexFlags),2)
-		$Padding = StringMid($InputData,$LocalOffset+28,4)
+		;$Padding = StringMid($InputData,$LocalOffset+28,4)
 		$MFTReferenceOfParent = StringMid($InputData,$LocalOffset+32,12)
 		$MFTReferenceOfParent = Dec(_SwapEndian($MFTReferenceOfParent),2)
 		$MFTReferenceOfParentSeqNo = StringMid($InputData,$LocalOffset+44,4)
@@ -1016,14 +1215,14 @@ Func _ParseCoreValidData($InputData,$FirstEntryOffset)
 		If @error Then
 			$Indx_CTime = $TimestampErrorVal
 		ElseIf $TimestampPrecision = 2 Then
-			$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-4)
-			$Indx_CTime_Precision = StringRight($Indx_CTime,3)
+			;$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-4)
+			;$Indx_CTime_Precision = StringRight($Indx_CTime,3)
 		ElseIf $TimestampPrecision = 3 Then
 			$Indx_CTime = $Indx_CTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_CTime_tmp, 4))
-			$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-9)
-			$Indx_CTime_Precision = StringRight($Indx_CTime,8)
+			;$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-9)
+			;$Indx_CTime_Precision = StringRight($Indx_CTime,8)
 		Else
-			$Indx_CTime_Core = $Indx_CTime
+			;$Indx_CTime_Core = $Indx_CTime
 		EndIf
 		;
 		$Indx_ATime = StringMid($InputData, $LocalOffset + 64, 16)
@@ -1033,14 +1232,14 @@ Func _ParseCoreValidData($InputData,$FirstEntryOffset)
 		If @error Then
 			$Indx_ATime = $TimestampErrorVal
 		ElseIf $TimestampPrecision = 2 Then
-			$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-4)
-			$Indx_ATime_Precision = StringRight($Indx_ATime,3)
+			;$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-4)
+			;$Indx_ATime_Precision = StringRight($Indx_ATime,3)
 		ElseIf $TimestampPrecision = 3 Then
 			$Indx_ATime = $Indx_ATime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_ATime_tmp, 4))
-			$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-9)
-			$Indx_ATime_Precision = StringRight($Indx_ATime,8)
+			;$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-9)
+			;$Indx_ATime_Precision = StringRight($Indx_ATime,8)
 		Else
-			$Indx_ATime_Core = $Indx_ATime
+			;$Indx_ATime_Core = $Indx_ATime
 		EndIf
 		;
 		$Indx_MTime = StringMid($InputData, $LocalOffset + 80, 16)
@@ -1050,14 +1249,14 @@ Func _ParseCoreValidData($InputData,$FirstEntryOffset)
 		If @error Then
 			$Indx_MTime = $TimestampErrorVal
 		ElseIf $TimestampPrecision = 2 Then
-			$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-4)
-			$Indx_MTime_Precision = StringRight($Indx_MTime,3)
+			;$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-4)
+			;$Indx_MTime_Precision = StringRight($Indx_MTime,3)
 		ElseIf $TimestampPrecision = 3 Then
 			$Indx_MTime = $Indx_MTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_MTime_tmp, 4))
-			$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-9)
-			$Indx_MTime_Precision = StringRight($Indx_MTime,8)
+			;$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-9)
+			;$Indx_MTime_Precision = StringRight($Indx_MTime,8)
 		Else
-			$Indx_MTime_Core = $Indx_MTime
+			;$Indx_MTime_Core = $Indx_MTime
 		EndIf
 		;
 		$Indx_RTime = StringMid($InputData, $LocalOffset + 96, 16)
@@ -1067,14 +1266,14 @@ Func _ParseCoreValidData($InputData,$FirstEntryOffset)
 		If @error Then
 			$Indx_RTime = $TimestampErrorVal
 		ElseIf $TimestampPrecision = 2 Then
-			$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-4)
-			$Indx_RTime_Precision = StringRight($Indx_RTime,3)
+			;$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-4)
+			;$Indx_RTime_Precision = StringRight($Indx_RTime,3)
 		ElseIf $TimestampPrecision = 3 Then
 			$Indx_RTime = $Indx_RTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_RTime_tmp, 4))
-			$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-9)
-			$Indx_RTime_Precision = StringRight($Indx_RTime,8)
+			;$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-9)
+			;$Indx_RTime_Precision = StringRight($Indx_RTime,8)
 		Else
-			$Indx_RTime_Core = $Indx_RTime
+			;$Indx_RTime_Core = $Indx_RTime
 		EndIf
 		;
 		$Indx_AllocSize = StringMid($InputData,$LocalOffset+112,16)
@@ -1137,7 +1336,45 @@ Func _ParseCoreValidData($InputData,$FirstEntryOffset)
 			If $MFTReference > 11 And ($Indx_CTime=$TimestampErrorVal Or $Indx_ATime=$TimestampErrorVal Or $Indx_MTime=$TimestampErrorVal Or $Indx_RTime=$TimestampErrorVal) Then
 				Return $EntryCounter
 			EndIf
-			FileWriteLine($IndxEntriesI30CsvFile, $RecordOffset & $de & $IndxCurrentVcn & $de & $IsNotLeafNode & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
+
+			Local $TextString=""
+			If Not $DoDefaultAll Then
+				$TextString &= " IndxLastLsn:" & $IndxLastLsn
+				$TextString &= " IndexFlags:" & $IndexFlags
+				$TextString &= " MftRefOfParent:" & $MFTReferenceOfParent
+				$TextString &= " MftRefOfParentSeqNo:" & $MFTReferenceOfParentSeqNo
+				$TextString &= " AllocSize:" & $Indx_AllocSize
+				$TextString &= " RealSize:" & $Indx_RealSize
+				$TextString &= " File_Flags:" & $Indx_File_Flags
+				$TextString &= " ReparseTag:" & $Indx_ReparseTag
+				$TextString &= " EaSize:" & $Indx_EaSize
+			EndIf
+
+			If $WithQuotes Then
+				Select
+					Case $DoDefaultAll
+						FileWriteLine($IndxEntriesI30CsvFile, '"'&$RecordOffset&'"' & $de & '"'&$IndxCurrentVcn&'"' & $de & '"'&$IsNotLeafNode&'"' & $de & '"'&$IndxLastLsn&'"' & $de & '"'&$FromIndxSlack&'"' & $de & '"'&$Indx_FileName&'"' & $de & '"'&$MFTReference&'"' & $de & '"'&$MFTReferenceSeqNo&'"' & $de & '"'&$IndexFlags&'"' & $de & '"'&$MFTReferenceOfParent&'"' & $de & '"'&$MFTReferenceOfParentSeqNo&'"' & $de & '"'&$Indx_CTime&'"' & $de & '"'&$Indx_ATime&'"' & $de & '"'&$Indx_MTime&'"' & $de & '"'&$Indx_RTime&'"' & $de & '"'&$Indx_AllocSize&'"' & $de & '"'&$Indx_RealSize&'"' & $de & '"'&$Indx_File_Flags&'"' & $de & '"'&$Indx_ReparseTag&'"' & $de & '"'&$Indx_EaSize&'"' & $de & '"'&$Indx_NameSpace&'"' & $de & '"'&$SubNodeVCN&'"' & $de & '"'&$TextInformation&'"' & @crlf)
+					Case $Dol2t
+						FileWriteLine($IndxEntriesI30CsvFile, '"'&'"'& StringLeft($Indx_CTime,$CharsToGrabDate) &'"' & $de & '"'& StringMid($Indx_CTime,$CharStartTime,$CharsToGrabTime) &'"' & $de & '"'& $UTCconfig &'"' & $de & '"'&"C"&'"' & $de & '"'&"INDX"&'"' & $de & '"'&"I30"&'"' & $de & '"'& "" &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& $Indx_FileName &'"' & $de & '"'&$MFTReference&'"' & $de & '"'&"Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString&'"' & $de & '""' & $de & '""' & @CRLF)
+						FileWriteLine($IndxEntriesI30CsvFile, '"'&'"'& StringLeft($Indx_ATime,$CharsToGrabDate) &'"' & $de & '"'& StringMid($Indx_ATime,$CharStartTime,$CharsToGrabTime) &'"' & $de & '"'& $UTCconfig &'"' & $de & '"'&"A"&'"' & $de & '"'&"INDX"&'"' & $de & '"'&"I30"&'"' & $de & '"'& "" &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& $Indx_FileName &'"' & $de & '"'&$MFTReference&'"' & $de & '"'&"Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString&'"' & $de & '""' & $de & '""' & @CRLF)
+						FileWriteLine($IndxEntriesI30CsvFile, '"'&'"'& StringLeft($Indx_MTime,$CharsToGrabDate) &'"' & $de & '"'& StringMid($Indx_MTime,$CharStartTime,$CharsToGrabTime) &'"' & $de & '"'& $UTCconfig &'"' & $de & '"'&"M"&'"' & $de & '"'&"INDX"&'"' & $de & '"'&"I30"&'"' & $de & '"'& "" &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& $Indx_FileName &'"' & $de & '"'&$MFTReference&'"' & $de & '"'&"Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString&'"' & $de & '""' & $de & '""' & @CRLF)
+						FileWriteLine($IndxEntriesI30CsvFile, '"'&'"'& StringLeft($Indx_RTime,$CharsToGrabDate) &'"' & $de & '"'& StringMid($Indx_RTime,$CharStartTime,$CharsToGrabTime) &'"' & $de & '"'& $UTCconfig &'"' & $de & '"'&"R"&'"' & $de & '"'&"INDX"&'"' & $de & '"'&"I30"&'"' & $de & '"'& "" &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& $Indx_FileName &'"' & $de & '"'&$MFTReference&'"' & $de & '"'&"Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString&'"' & $de & '""' & $de & '""' & @CRLF)
+					Case $DoBodyfile
+						FileWriteLine($IndxEntriesI30CsvFile, '""' & $de & '"'& "I30" &'"' & $de & '"'&$MFTReference&'"' & $de & '"'& "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " FileName:"&$Indx_FileName& " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& $Indx_ATime &'"' & $de & '"'& $Indx_MTime &'"' & $de & '"'& $Indx_CTime &'"' & $de & '"'& $Indx_RTime &'"' & @CRLF)
+				EndSelect
+			Else
+				Select
+					Case $DoDefaultAll
+						FileWriteLine($IndxEntriesI30CsvFile, $RecordOffset & $de & $IndxCurrentVcn & $de & $IsNotLeafNode & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
+					Case $Dol2t
+						FileWriteLine($IndxEntriesI30CsvFile, StringLeft($Indx_CTime,$CharsToGrabDate) & $de & StringMid($Indx_CTime,$CharStartTime,$CharsToGrabTime) & $de & $UTCconfig & $de & "C" & $de & "INDX" & $de & "I30" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & $Indx_FileName & $de & $MFTReference & $de & "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString & $de & "" & $de & "" & @CRLF)
+						FileWriteLine($IndxEntriesI30CsvFile, StringLeft($Indx_ATime,$CharsToGrabDate) & $de & StringMid($Indx_ATime,$CharStartTime,$CharsToGrabTime) & $de & $UTCconfig & $de & "A" & $de & "INDX" & $de & "I30" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & $Indx_FileName & $de & $MFTReference & $de & "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString & $de & "" & $de & "" & @CRLF)
+						FileWriteLine($IndxEntriesI30CsvFile, StringLeft($Indx_MTime,$CharsToGrabDate) & $de & StringMid($Indx_MTime,$CharStartTime,$CharsToGrabTime) & $de & $UTCconfig & $de & "M" & $de & "INDX" & $de & "I30" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & $Indx_FileName & $de & $MFTReference & $de & "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString & $de & "" & $de & "" & @CRLF)
+						FileWriteLine($IndxEntriesI30CsvFile, StringLeft($Indx_RTime,$CharsToGrabDate) & $de & StringMid($Indx_RTime,$CharStartTime,$CharsToGrabTime) & $de & $UTCconfig & $de & "R" & $de & "INDX" & $de & "I30" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & $Indx_FileName & $de & $MFTReference & $de & "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString & $de & "" & $de & "" & @CRLF)
+					Case $DoBodyfile
+						FileWriteLine($IndxEntriesI30CsvFile, "" & $de & "I30" & $de & $MFTReference & $de & "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " FileName:"&$Indx_FileName& " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString & $de & "" & $de & "" & $de & "" & $de &  $Indx_ATime  & $de &  $Indx_MTime  & $de &  $Indx_CTime  & $de &  $Indx_RTime  & @CRLF)
+				EndSelect
+			EndIf
 			$LocalOffset += $IndexEntryLength*2
 			$EntryCounter+=1
 			_ClearVar()
@@ -1151,7 +1388,7 @@ Func _ParseCoreValidData($InputData,$FirstEntryOffset)
 EndFunc
 
 Func _ParseCoreSlackSpace($InputData,$SkeewedOffset)
-	Local $LocalOffset = 1, $SubNodeVCN, $EntryCounter=0
+	Local $LocalOffset = 1, $SubNodeVCN, $EntryCounter=0, $AllTimestampsValid=1
 	$TextInformation=""
 	$IndxLastLsn = -1
 ;	ConsoleWrite("_ParseCoreSlackSpace():" & @crlf)
@@ -1178,70 +1415,74 @@ Func _ParseCoreSlackSpace($InputData,$SkeewedOffset)
 
 		$Indx_CTime = StringMid($InputData, $LocalOffset + 48, 16)
 		$Indx_CTime = _SwapEndian($Indx_CTime)
+		$CTime_TimestampTmp = Dec($Indx_CTime,2)
 		$Indx_CTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_CTime)
 		$Indx_CTime = _WinTime_UTCFileTimeFormat(Dec($Indx_CTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 		If @error Then
 			$Indx_CTime = $TimestampErrorVal
 		ElseIf $TimestampPrecision = 2 Then
-			$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-4)
-			$Indx_CTime_Precision = StringRight($Indx_CTime,3)
+			;$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-4)
+			;$Indx_CTime_Precision = StringRight($Indx_CTime,3)
 		ElseIf $TimestampPrecision = 3 Then
 			$Indx_CTime = $Indx_CTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_CTime_tmp, 4))
-			$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-9)
-			$Indx_CTime_Precision = StringRight($Indx_CTime,8)
+			;$Indx_CTime_Core = StringMid($Indx_CTime,1,StringLen($Indx_CTime)-9)
+			;$Indx_CTime_Precision = StringRight($Indx_CTime,8)
 		Else
-			$Indx_CTime_Core = $Indx_CTime
+			;$Indx_CTime_Core = $Indx_CTime
 		EndIf
 		;
 		$Indx_ATime = StringMid($InputData, $LocalOffset + 64, 16)
 		$Indx_ATime = _SwapEndian($Indx_ATime)
+		$ATime_TimestampTmp = Dec($Indx_ATime,2)
 		$Indx_ATime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_ATime)
 		$Indx_ATime = _WinTime_UTCFileTimeFormat(Dec($Indx_ATime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 		If @error Then
 			$Indx_ATime = $TimestampErrorVal
 		ElseIf $TimestampPrecision = 2 Then
-			$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-4)
-			$Indx_ATime_Precision = StringRight($Indx_ATime,3)
+			;$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-4)
+			;$Indx_ATime_Precision = StringRight($Indx_ATime,3)
 		ElseIf $TimestampPrecision = 3 Then
 			$Indx_ATime = $Indx_ATime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_ATime_tmp, 4))
-			$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-9)
-			$Indx_ATime_Precision = StringRight($Indx_ATime,8)
+			;$Indx_ATime_Core = StringMid($Indx_ATime,1,StringLen($Indx_ATime)-9)
+			;$Indx_ATime_Precision = StringRight($Indx_ATime,8)
 		Else
-			$Indx_ATime_Core = $Indx_ATime
+			;$Indx_ATime_Core = $Indx_ATime
 		EndIf
 		;
 		$Indx_MTime = StringMid($InputData, $LocalOffset + 80, 16)
 		$Indx_MTime = _SwapEndian($Indx_MTime)
+		$MTime_TimestampTmp = Dec($Indx_MTime,2)
 		$Indx_MTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_MTime)
 		$Indx_MTime = _WinTime_UTCFileTimeFormat(Dec($Indx_MTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 		If @error Then
 			$Indx_MTime = $TimestampErrorVal
 		ElseIf $TimestampPrecision = 2 Then
-			$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-4)
-			$Indx_MTime_Precision = StringRight($Indx_MTime,3)
+			;$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-4)
+			;$Indx_MTime_Precision = StringRight($Indx_MTime,3)
 		ElseIf $TimestampPrecision = 3 Then
 			$Indx_MTime = $Indx_MTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_MTime_tmp, 4))
-			$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-9)
-			$Indx_MTime_Precision = StringRight($Indx_MTime,8)
+			;$Indx_MTime_Core = StringMid($Indx_MTime,1,StringLen($Indx_MTime)-9)
+			;$Indx_MTime_Precision = StringRight($Indx_MTime,8)
 		Else
-			$Indx_MTime_Core = $Indx_MTime
+			;$Indx_MTime_Core = $Indx_MTime
 		EndIf
 		;
 		$Indx_RTime = StringMid($InputData, $LocalOffset + 96, 16)
 		$Indx_RTime = _SwapEndian($Indx_RTime)
+		$RTime_TimestampTmp = Dec($Indx_RTime,2)
 		$Indx_RTime_tmp = _WinTime_UTCFileTimeToLocalFileTime("0x" & $Indx_RTime)
 		$Indx_RTime = _WinTime_UTCFileTimeFormat(Dec($Indx_RTime,2) - $tDelta, $DateTimeFormat, $TimestampPrecision)
 		If @error Then
 			$Indx_RTime = $TimestampErrorVal
 		ElseIf $TimestampPrecision = 2 Then
-			$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-4)
-			$Indx_RTime_Precision = StringRight($Indx_RTime,3)
+			;$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-4)
+			;$Indx_RTime_Precision = StringRight($Indx_RTime,3)
 		ElseIf $TimestampPrecision = 3 Then
 			$Indx_RTime = $Indx_RTime & $PrecisionSeparator2 & _FillZero(StringRight($Indx_RTime_tmp, 4))
-			$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-9)
-			$Indx_RTime_Precision = StringRight($Indx_RTime,8)
+			;$Indx_RTime_Core = StringMid($Indx_RTime,1,StringLen($Indx_RTime)-9)
+			;$Indx_RTime_Precision = StringRight($Indx_RTime,8)
 		Else
-			$Indx_RTime_Core = $Indx_RTime
+			;$Indx_RTime_Core = $Indx_RTime
 		EndIf
 		;
 		$Indx_AllocSize = StringMid($InputData,$LocalOffset+112,16)
@@ -1289,7 +1530,8 @@ Func _ParseCoreSlackSpace($InputData,$SkeewedOffset)
 				$Indx_NameSpace = "Unknown"
 		EndSelect
 		$Indx_FileNameHex = StringMid($InputData,$LocalOffset+164,$Indx_NameLength*4)
-		If $SkipUnicodeNames Then
+		If $StrictNameCheck Then
+		;If $SkipUnicodeNames Then
 			$NameTest = (_ValidateAnsiName($Indx_FileNameHex) And _ValidateWindowsFileName($Indx_FileNameHex))
 		Else
 			$NameTest = _ValidateWindowsFileName($Indx_FileNameHex)
@@ -1320,14 +1562,62 @@ Func _ParseCoreSlackSpace($InputData,$SkeewedOffset)
 			WEnd
 		EndIf
 		#ce
-		If $FileNameHealthy And $Indx_NameLength > 0 And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal And $Indx_NameSpace <> "Unknown" And $Indx_ReparseTag <> "UNKNOWN" And $Indx_AllocSize >= $Indx_RealSize And Mod($Indx_AllocSize,8)=0 Then
+		$AllTimestampsValid = 1
+		If $ExtendedTimestampCheck Then
+			If ($CTime_TimestampTmp < $TSCheckLow Or $CTime_TimestampTmp > $TSCheckHigh) And ($ATime_TimestampTmp < $TSCheckLow Or $ATime_TimestampTmp > $TSCheckHigh) And ($MTime_TimestampTmp < $TSCheckLow Or $MTime_TimestampTmp > $TSCheckHigh) And ($RTime_TimestampTmp < $TSCheckLow Or $RTime_TimestampTmp > $TSCheckHigh) Then
+				$AllTimestampsValid = 0
+			EndIf
+		EndIf
+
+		If $AllTimestampsValid And $FileNameHealthy And $Indx_NameLength > 0 And $Indx_CTime<>$TimestampErrorVal And $Indx_ATime<>$TimestampErrorVal And $Indx_MTime<>$TimestampErrorVal And $Indx_RTime<>$TimestampErrorVal And $Indx_NameSpace <> "Unknown" And $Indx_ReparseTag <> "UNKNOWN" And $Indx_AllocSize >= $Indx_RealSize And Mod($Indx_AllocSize,8)=0 Then
 			If $MFTReferenceSeqNo = 0 Then $TextInformation &= ";MftRef;MftRefSeqNo"
 			If $IndexFlags > 2 Then $TextInformation &= ";IndexFlags"
 			If $Padding <> "0000" Then $TextInformation &= ";Padding"
-			If $MFTReferenceOfParentSeqNo = 0 Then $TextInformation &= ";MFTReferenceOfParent;MFTReferenceOfParentSeqNo"
+			If $MFTReferenceOfParentSeqNo = 0 Then $TextInformation &= ";MftRefOfParent;MftRefOfParentSeqNo"
 			If ($DoReparseTag And StringInStr($Indx_ReparseTag,"UNKNOWN")) Then $TextInformation &= ";ReparseTag"
 			If ($DoEaSize And $Indx_EaSize < 8) Then $TextInformation &= ";EaSize"
-			FileWriteLine($IndxEntriesI30CsvFile, $RecordOffset & $de & $IndxCurrentVcn & $de & $IsNotLeafNode & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
+			;FileWriteLine($IndxEntriesI30CsvFile, $RecordOffset & $de & $IndxCurrentVcn & $de & $IsNotLeafNode & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
+			Local $TextString=""
+			If Not $DoDefaultAll Then
+				$TextString &= " IndxLastLsn:" & $IndxLastLsn
+				$TextString &= " IndexFlags:" & $IndexFlags
+				$TextString &= " MftRefOfParent:" & $MFTReferenceOfParent
+				$TextString &= " MftRefOfParentSeqNo:" & $MFTReferenceOfParentSeqNo
+				$TextString &= " AllocSize:" & $Indx_AllocSize
+				$TextString &= " RealSize:" & $Indx_RealSize
+				$TextString &= " File_Flags:" & $Indx_File_Flags
+				$TextString &= " ReparseTag:" & $Indx_ReparseTag
+				$TextString &= " EaSize:" & $Indx_EaSize
+				If $TextInformation <> "" Then
+					$TextString &= " CorruptEntries:" & $TextInformation
+				EndIf
+			EndIf
+
+			If $WithQuotes Then
+				Select
+					Case $DoDefaultAll
+						FileWriteLine($IndxEntriesI30CsvFile, '"'&$RecordOffset&'"' & $de & '"'&$IndxCurrentVcn&'"' & $de & '"'&$IsNotLeafNode&'"' & $de & '"'&$IndxLastLsn&'"' & $de & '"'&$FromIndxSlack&'"' & $de & '"'&$Indx_FileName&'"' & $de & '"'&$MFTReference&'"' & $de & '"'&$MFTReferenceSeqNo&'"' & $de & '"'&$IndexFlags&'"' & $de & '"'&$MFTReferenceOfParent&'"' & $de & '"'&$MFTReferenceOfParentSeqNo&'"' & $de & '"'&$Indx_CTime&'"' & $de & '"'&$Indx_ATime&'"' & $de & '"'&$Indx_MTime&'"' & $de & '"'&$Indx_RTime&'"' & $de & '"'&$Indx_AllocSize&'"' & $de & '"'&$Indx_RealSize&'"' & $de & '"'&$Indx_File_Flags&'"' & $de & '"'&$Indx_ReparseTag&'"' & $de & '"'&$Indx_EaSize&'"' & $de & '"'&$Indx_NameSpace&'"' & $de & '"'&$SubNodeVCN&'"' & $de & '"'&$TextInformation&'"' & @crlf)
+					Case $Dol2t
+						FileWriteLine($IndxEntriesI30CsvFile, '"'&'"'& StringLeft($Indx_CTime,$CharsToGrabDate) &'"' & $de & '"'& StringMid($Indx_CTime,$CharStartTime,$CharsToGrabTime) &'"' & $de & '"'& $UTCconfig &'"' & $de & '"'&"C"&'"' & $de & '"'&"INDX"&'"' & $de & '"'&"I30"&'"' & $de & '"'& "" &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& $Indx_FileName &'"' & $de & '"'&$MFTReference&'"' & $de & '"'&"Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString&'"' & $de & '""' & $de & '""' & @CRLF)
+						FileWriteLine($IndxEntriesI30CsvFile, '"'&'"'& StringLeft($Indx_ATime,$CharsToGrabDate) &'"' & $de & '"'& StringMid($Indx_ATime,$CharStartTime,$CharsToGrabTime) &'"' & $de & '"'& $UTCconfig &'"' & $de & '"'&"A"&'"' & $de & '"'&"INDX"&'"' & $de & '"'&"I30"&'"' & $de & '"'& "" &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& $Indx_FileName &'"' & $de & '"'&$MFTReference&'"' & $de & '"'&"Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString&'"' & $de & '""' & $de & '""' & @CRLF)
+						FileWriteLine($IndxEntriesI30CsvFile, '"'&'"'& StringLeft($Indx_MTime,$CharsToGrabDate) &'"' & $de & '"'& StringMid($Indx_MTime,$CharStartTime,$CharsToGrabTime) &'"' & $de & '"'& $UTCconfig &'"' & $de & '"'&"M"&'"' & $de & '"'&"INDX"&'"' & $de & '"'&"I30"&'"' & $de & '"'& "" &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& $Indx_FileName &'"' & $de & '"'&$MFTReference&'"' & $de & '"'&"Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString&'"' & $de & '""' & $de & '""' & @CRLF)
+						FileWriteLine($IndxEntriesI30CsvFile, '"'&'"'& StringLeft($Indx_RTime,$CharsToGrabDate) &'"' & $de & '"'& StringMid($Indx_RTime,$CharStartTime,$CharsToGrabTime) &'"' & $de & '"'& $UTCconfig &'"' & $de & '"'&"R"&'"' & $de & '"'&"INDX"&'"' & $de & '"'&"I30"&'"' & $de & '"'& "" &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& $Indx_FileName &'"' & $de & '"'&$MFTReference&'"' & $de & '"'&"Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString&'"' & $de & '""' & $de & '""' & @CRLF)
+					Case $DoBodyfile
+						FileWriteLine($IndxEntriesI30CsvFile, '""' & $de & '"'& "I30" &'"' & $de & '"'&$MFTReference&'"' & $de & '"'& "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " FileName:"&$Indx_FileName& " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& $Indx_ATime &'"' & $de & '"'& $Indx_MTime &'"' & $de & '"'& $Indx_CTime &'"' & $de & '"'& $Indx_RTime &'"' & @CRLF)
+				EndSelect
+			Else
+				Select
+					Case $DoDefaultAll
+						FileWriteLine($IndxEntriesI30CsvFile, $RecordOffset & $de & $IndxCurrentVcn & $de & $IsNotLeafNode & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_FileName & $de & $MFTReference & $de & $MFTReferenceSeqNo & $de & $IndexFlags & $de & $MFTReferenceOfParent & $de & $MFTReferenceOfParentSeqNo & $de & $Indx_CTime & $de & $Indx_ATime & $de & $Indx_MTime & $de & $Indx_RTime & $de & $Indx_AllocSize & $de & $Indx_RealSize & $de & $Indx_File_Flags & $de & $Indx_ReparseTag & $de & $Indx_EaSize & $de & $Indx_NameSpace & $de & $SubNodeVCN & $de & $TextInformation & @crlf)
+					Case $Dol2t
+						FileWriteLine($IndxEntriesI30CsvFile, StringLeft($Indx_CTime,$CharsToGrabDate) & $de & StringMid($Indx_CTime,$CharStartTime,$CharsToGrabTime) & $de & $UTCconfig & $de & "C" & $de & "INDX" & $de & "I30" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & $Indx_FileName & $de & $MFTReference & $de & "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString & $de & "" & $de & "" & @CRLF)
+						FileWriteLine($IndxEntriesI30CsvFile, StringLeft($Indx_ATime,$CharsToGrabDate) & $de & StringMid($Indx_ATime,$CharStartTime,$CharsToGrabTime) & $de & $UTCconfig & $de & "A" & $de & "INDX" & $de & "I30" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & $Indx_FileName & $de & $MFTReference & $de & "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString & $de & "" & $de & "" & @CRLF)
+						FileWriteLine($IndxEntriesI30CsvFile, StringLeft($Indx_MTime,$CharsToGrabDate) & $de & StringMid($Indx_MTime,$CharStartTime,$CharsToGrabTime) & $de & $UTCconfig & $de & "M" & $de & "INDX" & $de & "I30" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & $Indx_FileName & $de & $MFTReference & $de & "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString & $de & "" & $de & "" & @CRLF)
+						FileWriteLine($IndxEntriesI30CsvFile, StringLeft($Indx_RTime,$CharsToGrabDate) & $de & StringMid($Indx_RTime,$CharStartTime,$CharsToGrabTime) & $de & $UTCconfig & $de & "R" & $de & "INDX" & $de & "I30" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & $Indx_FileName & $de & $MFTReference & $de & "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString & $de & "" & $de & "" & @CRLF)
+					Case $DoBodyfile
+						FileWriteLine($IndxEntriesI30CsvFile, "" & $de & "I30" & $de & $MFTReference & $de & "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " FileName:"&$Indx_FileName& " MftRef:"&$MFTReference&" MftRefSeqNo:"&$MFTReferenceSeqNo & $TextString & $de & "" & $de & "" & $de & "" & $de &  $Indx_ATime  & $de &  $Indx_MTime  & $de &  $Indx_CTime  & $de &  $Indx_RTime  & @CRLF)
+				EndSelect
+			EndIf
 			If $IndexEntryLength = 0 Then $IndexEntryLength = (32+26+$Indx_NameLength)*2
 			$LocalOffset += $IndexEntryLength*2
 			$EntryCounter+=1
@@ -1445,8 +1735,8 @@ EndFunc
 
 Func _ApplyFixupsIndx($Entry)
 ;	ConsoleWrite("Starting function _StripIndxRecord()" & @crlf)
-	Local $LocalAttributeOffset = 1,$IndxHdrUpdateSeqArrOffset,$IndxHdrUpdateSeqArrSize,$IndxHdrUpdSeqArr,$IndxHdrUpdSeqArrPart0,$IndxHdrUpdSeqArrPart1,$IndxHdrUpdSeqArrPart2,$IndxHdrUpdSeqArrPart3,$IndxHdrUpdSeqArrPart4,$IndxHdrUpdSeqArrPart5,$IndxHdrUpdSeqArrPart6,$IndxHdrUpdSeqArrPart7,$IndxHdrUpdSeqArrPart8
-	Local $IndxRecordEnd1,$IndxRecordEnd2,$IndxRecordEnd3,$IndxRecordEnd4,$IndxRecordEnd5,$IndxRecordEnd6,$IndxRecordEnd7,$IndxRecordEnd8,$IndxRecordSize,$IndxHeaderSize,$IsNotLeafNode
+	Local $LocalAttributeOffset = 1,$IndxHdrUpdateSeqArrOffset,$IndxHdrUpdateSeqArrSize,$IndxHdrUpdSeqArr,$IndxHdrUpdSeqArrPart0,$IndxHdrUpdSeqArrPart1,$IndxHdrUpdSeqArrPart2,$IndxHdrUpdSeqArrPart3,$IndxHdrUpdSeqArrPart4,$IndxHdrUpdSeqArrPart5,$IndxHdrUpdSeqArrPart6,$IndxHdrUpdSeqArrPart7;,$IndxHdrUpdSeqArrPart8
+	Local $IndxRecordEnd1,$IndxRecordEnd2,$IndxRecordEnd3,$IndxRecordEnd4,$IndxRecordEnd5,$IndxRecordEnd6,$IndxRecordEnd7,$IndxRecordEnd8;,$IndxRecordSize,$IndxHeaderSize,$IsNotLeafNode
 ;	ConsoleWrite("Unfixed INDX record:" & @crlf)
 ;	ConsoleWrite(_HexEncode("0x"&$Entry) & @crlf)
 ;	ConsoleWrite(_HexEncode("0x" & StringMid($Entry,1,4096)) & @crlf)
@@ -1464,7 +1754,7 @@ Func _ApplyFixupsIndx($Entry)
 	$IndxHdrUpdSeqArrPart5 = StringMid($IndxHdrUpdSeqArr,21,4)
 	$IndxHdrUpdSeqArrPart6 = StringMid($IndxHdrUpdSeqArr,25,4)
 	$IndxHdrUpdSeqArrPart7 = StringMid($IndxHdrUpdSeqArr,29,4)
-	$IndxHdrUpdSeqArrPart8 = StringMid($IndxHdrUpdSeqArr,33,4)
+	;$IndxHdrUpdSeqArrPart8 = StringMid($IndxHdrUpdSeqArr,33,4)
 	$IndxRecordEnd1 = StringMid($Entry,1021,4)
 	$IndxRecordEnd2 = StringMid($Entry,2045,4)
 	$IndxRecordEnd3 = StringMid($Entry,3069,4)
@@ -1862,16 +2152,27 @@ Func _GetInputParams()
 		If StringLeft($cmdline[$i],9) = "/CleanUp:" Then $CleanUp = StringMid($cmdline[$i],10)
 		If StringLeft($cmdline[$i],16) = "/VerifyFragment:" Then $VerifyFragment = StringMid($cmdline[$i],17)
 		If StringLeft($cmdline[$i],17) = "/OutFragmentName:" Then $OutFragmentName = StringMid($cmdline[$i],18)
+		If StringLeft($cmdline[$i],17) = "/StrictNameCheck:" Then $StrictNameCheck = StringMid($cmdline[$i],18)
 	Next
 
 	If StringLen($ScanMode) > 0 Then
 		If Not StringIsDigit($ScanMode) Then
 			ConsoleWrite("ScanMode was invalid: " & $ScanMode & @CRLF)
-			Exit
+			Exit(1)
 		EndIf
 ;		If $ScanMode > 15 Then $ScanMode = 15
 	Else
 		$ScanMode = 0
+	EndIf
+
+	If StringLen($StrictNameCheck) > 0 Then
+		If Not StringIsDigit($StrictNameCheck) Then
+			ConsoleWrite("StrictNameCheck was invalid: " & $StrictNameCheck & @CRLF)
+			Exit(1)
+		EndIf
+		$StrictNameCheck = 1
+	Else
+		$StrictNameCheck = 0
 	EndIf
 
 	If StringLen($TimeZone) > 0 Then
@@ -1934,24 +2235,19 @@ Func _GetInputParams()
 	If StringLen($BinaryFragment) > 0 Then
 		If Not FileExists($BinaryFragment) Then
 			ConsoleWrite("Error input INDX chunk file does not exist." & @CRLF)
-			Exit
+			Exit(1)
 		EndIf
 ;		ConsoleWrite("$BinaryFragment: " & $BinaryFragment & @CRLF)
 	EndIf
-#cs
+
 	If StringLen($OutputFormat) > 0 Then
-		If $OutputFormat = "l2t" Then $checkl2t = 1
-		If $OutputFormat = "bodyfile" Then $checkbodyfile = 1
-		If $OutputFormat = "all" Then $checkdefaultall = 1
-		If $checkl2t + $checkbodyfile = 0 Then $checkdefaultall = 1
+		If $OutputFormat = "l2t" Then $Dol2t = True
+		If $OutputFormat = "bodyfile" Then $DoBodyfile = True
+		If $OutputFormat = "all" Then $DoDefaultAll = True
+		If $Dol2t = False And $DoBodyfile = False Then $DoDefaultAll = True
 	Else
-		$checkdefaultall = 1
+		$DoDefaultAll = True
 	EndIf
-#ce
-	$checkdefaultall = 1
-	$DoDefaultAll = 1
-	$dol2t = 0
-	$DoBodyfile = 0
 
 	If StringLen($PrecisionSeparator) <> 1 Then $PrecisionSeparator = "."
 	If StringLen($SeparatorInput) <> 1 Then $SeparatorInput = "|"
@@ -1980,6 +2276,11 @@ Func _GetInputParams()
 		$DateTimeFormat = 6
 	EndIf
 
+	If ($DateTimeFormat = 4 Or $DateTimeFormat = 5) And ($checkl2t + $checkbodyfile > 0) Then
+		ConsoleWrite("Error: TSFormat can't be 4 or 5 in combination with OutputFormat l2t and bodyfile" & @CRLF)
+		Exit(1)
+	EndIf
+
 	If StringLen($CheckSlack) > 0 Then
 		If $CheckSlack <> 0 And $CheckSlack <> 1 Then
 			ConsoleWrite("Error in slack configuration: " & $CheckSlack & @CRLF)
@@ -2003,7 +2304,7 @@ Func _GetInputParams()
 	If StringLen($OutFragmentName) > 0 Then
 		If StringInStr($OutFragmentName,"\") Then
 			ConsoleWrite("Error: OutFragmentName must be a filename and not a path." & @CRLF)
-			Exit
+			Exit(1)
 		EndIf
 	EndIf
 
@@ -2070,7 +2371,7 @@ Func _GetUTCRegion($UTCRegion)
 	Else
 		$part1 = $UTCRegion
 	EndIf
-	Global $UTCconfig = $part1
+	$UTCconfig = $part1
 	If StringRight($part1,2) = "15" Then $part1 = StringReplace($part1,".15",".25")
 	If StringRight($part1,2) = "30" Then $part1 = StringReplace($part1,".30",".50")
 	If StringRight($part1,2) = "45" Then $part1 = StringReplace($part1,".45",".75")
@@ -2377,8 +2678,41 @@ Func _DecodeIndxContentObjIdO($InputData,$FirstEntryOffset)
 		$Indx_GUIDDomainId_Node = _DecodeMacFromGuid($Indx_GUIDDomainId_Node)
 		$Indx_GUIDDomainId = _HexToGuidStr($Indx_GUIDDomainId,1)
 
-		;FileWriteLine($IndxEntriesObjIdOCsvFile, $RecordOffset & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_DataOffset & $de & $Indx_DataSize & $de & $Indx_Padding1 & $de & $Indx_IndexEntrySize & $de & $Indx_IndexKeySize & $de & $Indx_Flags & $de & $Indx_Padding2 & $de & $Indx_GUIDObjectId & $de & $Indx_MftRef & $de & $Indx_MftRefSeqNo & $de & $Indx_GUIDBirthVolumeId & $de & $Indx_GUIDBirthObjectId & $de & $Indx_GUIDDomainId & $de & $Indx_GUIDObjectId_Version & $de & $Indx_GUIDObjectId_Timestamp & $de & $Indx_GUIDObjectId_TimestampDec & $de & $Indx_GUIDObjectId_ClockSeq & $de & $Indx_GUIDObjectId_Node & $de & $Indx_GUIDBirthVolumeId_Version & $de & $Indx_GUIDBirthVolumeId_Timestamp & $de & $Indx_GUIDBirthVolumeId_TimestampDec & $de & $Indx_GUIDBirthVolumeId_ClockSeq & $de & $Indx_GUIDBirthVolumeId_Node & $de & $Indx_GUIDBirthObjectId_Version & $de & $Indx_GUIDBirthObjectId_Timestamp & $de & $Indx_GUIDBirthObjectId_TimestampDec & $de & $Indx_GUIDBirthObjectId_ClockSeq & $de & $Indx_GUIDBirthObjectId_Node & $de & $Indx_GUIDDomainId_Version & $de & $Indx_GUIDDomainId_Timestamp & $de & $Indx_GUIDDomainId_TimestampDec & $de & $Indx_GUIDDomainId_ClockSeq & $de & $Indx_GUIDDomainId_Node & $de & $TextInformation & @crlf)
-		FileWriteLine($IndxEntriesObjIdOCsvFile, $RecordOffset & $de & $IndxCurrentVcn & $de & $IsNotLeafNode & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_DataOffset & $de & $Indx_DataSize & $de & $Indx_Padding1 & $de & $Indx_IndexEntrySize & $de & $Indx_IndexKeySize & $de & $Indx_Flags & $de & $Indx_Padding2 & $de & $Indx_MftRef & $de & $Indx_MftRefSeqNo & $de & $Indx_GUIDObjectId & $de & $Indx_GUIDObjectId_Version & $de & $Indx_GUIDObjectId_Timestamp & $de & $Indx_GUIDObjectId_TimestampDec & $de & $Indx_GUIDObjectId_ClockSeq & $de & $Indx_GUIDObjectId_Node & $de & $Indx_GUIDBirthVolumeId & $de & $Indx_GUIDBirthVolumeId_Version & $de & $Indx_GUIDBirthVolumeId_Timestamp & $de & $Indx_GUIDBirthVolumeId_TimestampDec & $de & $Indx_GUIDBirthVolumeId_ClockSeq & $de & $Indx_GUIDBirthVolumeId_Node & $de & $Indx_GUIDBirthObjectId & $de & $Indx_GUIDBirthObjectId_Version & $de & $Indx_GUIDBirthObjectId_Timestamp & $de & $Indx_GUIDBirthObjectId_TimestampDec & $de & $Indx_GUIDBirthObjectId_ClockSeq & $de & $Indx_GUIDBirthObjectId_Node & $de & $Indx_GUIDDomainId & $de & $Indx_GUIDDomainId_Version & $de & $Indx_GUIDDomainId_Timestamp & $de & $Indx_GUIDDomainId_TimestampDec & $de & $Indx_GUIDDomainId_ClockSeq & $de & $Indx_GUIDDomainId_Node & $de & $TextInformation & @crlf)
+		Local $TextString
+		If Not $DoDefaultAll Then
+			$TextString &= " ObjectId:" & $Indx_GUIDObjectId
+			If $Indx_GUIDObjectId_Version = 1 Then
+				$TextString &= " ObjectId_Timestamp:" & $Indx_GUIDObjectId_Timestamp
+			EndIf
+			$TextString &= " ObjectId_Node:" & $Indx_GUIDObjectId_Node
+			$TextString &= " BirthVolumeId:" & $Indx_GUIDBirthVolumeId
+			If $Indx_GUIDBirthVolumeId_Version = 1 Then
+				$TextString &= " BirthVolumeId_Timestamp:" & $Indx_GUIDBirthVolumeId_Timestamp
+			EndIf
+			$TextString &= " BirthObjectId:" & $Indx_GUIDBirthObjectId
+			If $Indx_GUIDBirthObjectId_Version = 1 Then
+				$TextString &= " BirthObjectId_Timestamp:" & $Indx_GUIDBirthObjectId_Timestamp
+			EndIf
+		EndIf
+		If $WithQuotes Then
+			Select
+				Case $DoDefaultAll
+					FileWriteLine($IndxEntriesObjIdOCsvFile, '"'&$RecordOffset&'"' & $de & '"'&$IndxCurrentVcn&'"' & $de & '"'&$IsNotLeafNode&'"' & $de & '"'&$IndxLastLsn&'"' & $de & '"'&$FromIndxSlack&'"' & $de & '"'&$Indx_DataOffset&'"' & $de & '"'&$Indx_DataSize&'"' & $de & '"'&$Indx_Padding1&'"' & $de & '"'&$Indx_IndexEntrySize&'"' & $de & '"'&$Indx_IndexKeySize&'"' & $de & '"'&$Indx_Flags&'"' & $de & '"'&$Indx_Padding2&'"' & $de & '"'&$Indx_MftRef&'"' & $de & '"'&$Indx_MftRefSeqNo&'"' & $de & '"'&$Indx_GUIDObjectId&'"' & $de & '"'&$Indx_GUIDObjectId_Version&'"' & $de & '"'&$Indx_GUIDObjectId_Timestamp&'"' & $de & '"'&$Indx_GUIDObjectId_TimestampDec&'"' & $de & '"'&$Indx_GUIDObjectId_ClockSeq&'"' & $de & '"'&$Indx_GUIDObjectId_Node&'"' & $de & '"'&$Indx_GUIDBirthVolumeId&'"' & $de & '"'&$Indx_GUIDBirthVolumeId_Version&'"' & $de & '"'&$Indx_GUIDBirthVolumeId_Timestamp&'"' & $de & '"'&$Indx_GUIDBirthVolumeId_TimestampDec&'"' & $de & '"'&$Indx_GUIDBirthVolumeId_ClockSeq&'"' & $de & '"'&$Indx_GUIDBirthVolumeId_Node&'"' & $de & '"'&$Indx_GUIDBirthObjectId&'"' & $de & '"'&$Indx_GUIDBirthObjectId_Version&'"' & $de & '"'&$Indx_GUIDBirthObjectId_Timestamp&'"' & $de & '"'&$Indx_GUIDBirthObjectId_TimestampDec&'"' & $de & '"'&$Indx_GUIDBirthObjectId_ClockSeq&'"' & $de & '"'&$Indx_GUIDBirthObjectId_Node&'"' & $de & '"'&$Indx_GUIDDomainId&'"' & $de & '"'&$Indx_GUIDDomainId_Version&'"' & $de & '"'&$Indx_GUIDDomainId_Timestamp&'"' & $de & '"'&$Indx_GUIDDomainId_TimestampDec&'"' & $de & '"'&$Indx_GUIDDomainId_ClockSeq&'"' & $de & '"'&$Indx_GUIDDomainId_Node&'"' & $de & '"'&$TextInformation&'"' & @crlf)
+				Case $Dol2t
+					FileWriteLine($IndxEntriesObjIdOCsvFile, '"'&'"'& StringLeft($Indx_GUIDObjectId_Timestamp,$CharsToGrabDate) &'"' & $de & '"'& StringMid($Indx_GUIDObjectId_Timestamp,$CharStartTime,$CharsToGrabTime) &'"' & $de & '"'& $UTCconfig &'"' & $de & '"'&"MACB"&'"' & $de & '"'&"INDX"&'"' & $de & '"'&"ObjId:O"&'"' & $de & '"'& "" &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& "" &'"' & $de & '"'&$Indx_MftRef&'"' & $de & '"'&"Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$Indx_MftRef&" MftRefSeqNo:"&$Indx_MftRefSeqNo & $TextString&'"' & $de & '""' & $de & '""' & @CRLF)
+				Case $DoBodyfile
+					FileWriteLine($IndxEntriesObjIdOCsvFile, '""' & $de & '"'& "ObjId:O" &'"' & $de & '"'&$Indx_MftRef&'"' & $de & '"'& "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$Indx_MftRef&" MftRefSeqNo:"&$Indx_MftRefSeqNo & $TextString &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& "" &'"' & $de & '"'& "" &'"' & $de & '"'& "" &'"' & $de & '"'& "" &'"' & @CRLF)
+			EndSelect
+		Else
+			Select
+				Case $DoDefaultAll
+					FileWriteLine($IndxEntriesObjIdOCsvFile, $RecordOffset & $de & $IndxCurrentVcn & $de & $IsNotLeafNode & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_DataOffset & $de & $Indx_DataSize & $de & $Indx_Padding1 & $de & $Indx_IndexEntrySize & $de & $Indx_IndexKeySize & $de & $Indx_Flags & $de & $Indx_Padding2 & $de & $Indx_MftRef & $de & $Indx_MftRefSeqNo & $de & $Indx_GUIDObjectId & $de & $Indx_GUIDObjectId_Version & $de & $Indx_GUIDObjectId_Timestamp & $de & $Indx_GUIDObjectId_TimestampDec & $de & $Indx_GUIDObjectId_ClockSeq & $de & $Indx_GUIDObjectId_Node & $de & $Indx_GUIDBirthVolumeId & $de & $Indx_GUIDBirthVolumeId_Version & $de & $Indx_GUIDBirthVolumeId_Timestamp & $de & $Indx_GUIDBirthVolumeId_TimestampDec & $de & $Indx_GUIDBirthVolumeId_ClockSeq & $de & $Indx_GUIDBirthVolumeId_Node & $de & $Indx_GUIDBirthObjectId & $de & $Indx_GUIDBirthObjectId_Version & $de & $Indx_GUIDBirthObjectId_Timestamp & $de & $Indx_GUIDBirthObjectId_TimestampDec & $de & $Indx_GUIDBirthObjectId_ClockSeq & $de & $Indx_GUIDBirthObjectId_Node & $de & $Indx_GUIDDomainId & $de & $Indx_GUIDDomainId_Version & $de & $Indx_GUIDDomainId_Timestamp & $de & $Indx_GUIDDomainId_TimestampDec & $de & $Indx_GUIDDomainId_ClockSeq & $de & $Indx_GUIDDomainId_Node & $de & $TextInformation & @crlf)
+				Case $Dol2t
+					FileWriteLine($IndxEntriesObjIdOCsvFile, StringLeft($Indx_GUIDObjectId_Timestamp,$CharsToGrabDate) & $de & StringMid($Indx_GUIDObjectId_Timestamp,$CharStartTime,$CharsToGrabTime) & $de & $UTCconfig & $de & "MACB" & $de & "INDX" & $de & "ObjId:O" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & $Indx_MftRef & $de & "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$Indx_MftRef&" MftRefSeqNo:"&$Indx_MftRefSeqNo & $TextString & $de & "" & $de & "" & @CRLF)
+				Case $DoBodyfile
+					FileWriteLine($IndxEntriesObjIdOCsvFile, "" & $de & "ObjId:O" & $de & $Indx_MftRef & $de & "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$Indx_MftRef&" MftRefSeqNo:"&$Indx_MftRefSeqNo & $TextString & $de & "" & $de & "" & $de & "" & $de &  ""  & $de &  ""  & $de &  ""  & $de &  ""  & @CRLF)
+			EndSelect
+		EndIf
 		$EntryCounter += 1
 		$LocalOffset += 176
 		If $LocalOffset >= $SizeofIndxRecord Then
@@ -2534,13 +2868,49 @@ Func _DecodeSlackIndxContentObjIdO($InputData,$FirstEntryOffset)
 			Return $EntryCounter
 		EndIf
 
+		Local $TextString
+
 		If Mod($Indx_DataOffset,8) = 0 And $Indx_DataOffset < 64 And Mod($Indx_DataSize,8) = 0 And $Indx_DataSize < 128 And $Indx_Padding1 = 0 And Mod($Indx_IndexEntrySize,8) = 0 And $Indx_IndexEntrySize < 128 And Mod($Indx_IndexKeySize,16) = 0 And $Indx_IndexKeySize < 17 And $Indx_Flags < 0x0003 And $Indx_Padding2 = 0 And $Indx_GUIDObjectId <> $NullGuid And $GuidProbablyBad = 0 And $Indx_MftRef > 0 And $Indx_MftRefSeqNo > 0 Then
 			;If $Indx_DataOffset = 0 Then $TextInformation &= ";DataOffset"
 			;If $Indx_DataSize = 0 Then $TextInformation &= ";DataSize"
 			;If $Indx_Padding1 > 0 Then $TextInformation &= ";Padding1"
 			;If $Indx_IndexEntrySize = 0 Then $TextInformation &= ";IndexEntrySize"
 			;If $Indx_IndexKeySize = 0 Then $TextInformation &= ";IndexKeySize"
-			FileWriteLine($IndxEntriesObjIdOCsvFile, $RecordOffset & $de & $IndxCurrentVcn & $de & $IsNotLeafNode & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_DataOffset & $de & $Indx_DataSize & $de & $Indx_Padding1 & $de & $Indx_IndexEntrySize & $de & $Indx_IndexKeySize & $de & $Indx_Flags & $de & $Indx_Padding2 & $de & $Indx_MftRef & $de & $Indx_MftRefSeqNo & $de & $Indx_GUIDObjectId & $de & $Indx_GUIDObjectId_Version & $de & $Indx_GUIDObjectId_Timestamp & $de & $Indx_GUIDObjectId_TimestampDec & $de & $Indx_GUIDObjectId_ClockSeq & $de & $Indx_GUIDObjectId_Node & $de & $Indx_GUIDBirthVolumeId & $de & $Indx_GUIDBirthVolumeId_Version & $de & $Indx_GUIDBirthVolumeId_Timestamp & $de & $Indx_GUIDBirthVolumeId_TimestampDec & $de & $Indx_GUIDBirthVolumeId_ClockSeq & $de & $Indx_GUIDBirthVolumeId_Node & $de & $Indx_GUIDBirthObjectId & $de & $Indx_GUIDBirthObjectId_Version & $de & $Indx_GUIDBirthObjectId_Timestamp & $de & $Indx_GUIDBirthObjectId_TimestampDec & $de & $Indx_GUIDBirthObjectId_ClockSeq & $de & $Indx_GUIDBirthObjectId_Node & $de & $Indx_GUIDDomainId & $de & $Indx_GUIDDomainId_Version & $de & $Indx_GUIDDomainId_Timestamp & $de & $Indx_GUIDDomainId_TimestampDec & $de & $Indx_GUIDDomainId_ClockSeq & $de & $Indx_GUIDDomainId_Node & $de & $TextInformation & @crlf)
+
+			If Not $DoDefaultAll Then
+				$TextString &= " ObjectId:" & $Indx_GUIDObjectId
+				If $Indx_GUIDObjectId_Version = 1 Then
+					$TextString &= " ObjectId_Timestamp:" & $Indx_GUIDObjectId_Timestamp
+				EndIf
+				$TextString &= " ObjectId_Node:" & $Indx_GUIDObjectId_Node
+				$TextString &= " BirthVolumeId:" & $Indx_GUIDBirthVolumeId
+				If $Indx_GUIDBirthVolumeId_Version = 1 Then
+					$TextString &= " BirthVolumeId_Timestamp:" & $Indx_GUIDBirthVolumeId_Timestamp
+				EndIf
+				$TextString &= " BirthObjectId:" & $Indx_GUIDBirthObjectId
+				If $Indx_GUIDBirthObjectId_Version = 1 Then
+					$TextString &= " BirthObjectId_Timestamp:" & $Indx_GUIDBirthObjectId_Timestamp
+				EndIf
+			EndIf
+			If $WithQuotes Then
+				Select
+					Case $DoDefaultAll
+						FileWriteLine($IndxEntriesObjIdOCsvFile, '"'&$RecordOffset&'"' & $de & '"'&$IndxCurrentVcn&'"' & $de & '"'&$IsNotLeafNode&'"' & $de & '"'&$IndxLastLsn&'"' & $de & '"'&$FromIndxSlack&'"' & $de & '"'&$Indx_DataOffset&'"' & $de & '"'&$Indx_DataSize&'"' & $de & '"'&$Indx_Padding1&'"' & $de & '"'&$Indx_IndexEntrySize&'"' & $de & '"'&$Indx_IndexKeySize&'"' & $de & '"'&$Indx_Flags&'"' & $de & '"'&$Indx_Padding2&'"' & $de & '"'&$Indx_MftRef&'"' & $de & '"'&$Indx_MftRefSeqNo&'"' & $de & '"'&$Indx_GUIDObjectId&'"' & $de & '"'&$Indx_GUIDObjectId_Version&'"' & $de & '"'&$Indx_GUIDObjectId_Timestamp&'"' & $de & '"'&$Indx_GUIDObjectId_TimestampDec&'"' & $de & '"'&$Indx_GUIDObjectId_ClockSeq&'"' & $de & '"'&$Indx_GUIDObjectId_Node&'"' & $de & '"'&$Indx_GUIDBirthVolumeId&'"' & $de & '"'&$Indx_GUIDBirthVolumeId_Version&'"' & $de & '"'&$Indx_GUIDBirthVolumeId_Timestamp&'"' & $de & '"'&$Indx_GUIDBirthVolumeId_TimestampDec&'"' & $de & '"'&$Indx_GUIDBirthVolumeId_ClockSeq&'"' & $de & '"'&$Indx_GUIDBirthVolumeId_Node&'"' & $de & '"'&$Indx_GUIDBirthObjectId&'"' & $de & '"'&$Indx_GUIDBirthObjectId_Version&'"' & $de & '"'&$Indx_GUIDBirthObjectId_Timestamp&'"' & $de & '"'&$Indx_GUIDBirthObjectId_TimestampDec&'"' & $de & '"'&$Indx_GUIDBirthObjectId_ClockSeq&'"' & $de & '"'&$Indx_GUIDBirthObjectId_Node&'"' & $de & '"'&$Indx_GUIDDomainId&'"' & $de & '"'&$Indx_GUIDDomainId_Version&'"' & $de & '"'&$Indx_GUIDDomainId_Timestamp&'"' & $de & '"'&$Indx_GUIDDomainId_TimestampDec&'"' & $de & '"'&$Indx_GUIDDomainId_ClockSeq&'"' & $de & '"'&$Indx_GUIDDomainId_Node&'"' & $de & '"'&$TextInformation&'"' & @crlf)
+					Case $Dol2t
+						FileWriteLine($IndxEntriesObjIdOCsvFile, '"'&'"'& StringLeft($Indx_GUIDObjectId_Timestamp,$CharsToGrabDate) &'"' & $de & '"'& StringMid($Indx_GUIDObjectId_Timestamp,$CharStartTime,$CharsToGrabTime) &'"' & $de & '"'& $UTCconfig &'"' & $de & '"'&"MACB"&'"' & $de & '"'&"INDX"&'"' & $de & '"'&"ObjId:O"&'"' & $de & '"'& "" &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& "" &'"' & $de & '"'&$Indx_MftRef&'"' & $de & '"'&"Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$Indx_MftRef&" MftRefSeqNo:"&$Indx_MftRefSeqNo & $TextString&'"' & $de & '""' & $de & '""' & @CRLF)
+					Case $DoBodyfile
+						FileWriteLine($IndxEntriesObjIdOCsvFile, '""' & $de & '"'& "ObjId:O" &'"' & $de & '"'&$Indx_MftRef&'"' & $de & '"'& "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$Indx_MftRef&" MftRefSeqNo:"&$Indx_MftRefSeqNo & $TextString &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& "" &'"' & $de & '"'& "" &'"' & $de & '"'& "" &'"' & $de & '"'& "" &'"' & @CRLF)
+				EndSelect
+			Else
+				Select
+					Case $DoDefaultAll
+						FileWriteLine($IndxEntriesObjIdOCsvFile, $RecordOffset & $de & $IndxCurrentVcn & $de & $IsNotLeafNode & $de & $IndxLastLsn & $de & $FromIndxSlack & $de & $Indx_DataOffset & $de & $Indx_DataSize & $de & $Indx_Padding1 & $de & $Indx_IndexEntrySize & $de & $Indx_IndexKeySize & $de & $Indx_Flags & $de & $Indx_Padding2 & $de & $Indx_MftRef & $de & $Indx_MftRefSeqNo & $de & $Indx_GUIDObjectId & $de & $Indx_GUIDObjectId_Version & $de & $Indx_GUIDObjectId_Timestamp & $de & $Indx_GUIDObjectId_TimestampDec & $de & $Indx_GUIDObjectId_ClockSeq & $de & $Indx_GUIDObjectId_Node & $de & $Indx_GUIDBirthVolumeId & $de & $Indx_GUIDBirthVolumeId_Version & $de & $Indx_GUIDBirthVolumeId_Timestamp & $de & $Indx_GUIDBirthVolumeId_TimestampDec & $de & $Indx_GUIDBirthVolumeId_ClockSeq & $de & $Indx_GUIDBirthVolumeId_Node & $de & $Indx_GUIDBirthObjectId & $de & $Indx_GUIDBirthObjectId_Version & $de & $Indx_GUIDBirthObjectId_Timestamp & $de & $Indx_GUIDBirthObjectId_TimestampDec & $de & $Indx_GUIDBirthObjectId_ClockSeq & $de & $Indx_GUIDBirthObjectId_Node & $de & $Indx_GUIDDomainId & $de & $Indx_GUIDDomainId_Version & $de & $Indx_GUIDDomainId_Timestamp & $de & $Indx_GUIDDomainId_TimestampDec & $de & $Indx_GUIDDomainId_ClockSeq & $de & $Indx_GUIDDomainId_Node & $de & $TextInformation & @crlf)
+					Case $Dol2t
+						FileWriteLine($IndxEntriesObjIdOCsvFile, StringLeft($Indx_GUIDObjectId_Timestamp,$CharsToGrabDate) & $de & StringMid($Indx_GUIDObjectId_Timestamp,$CharStartTime,$CharsToGrabTime) & $de & $UTCconfig & $de & "MACB" & $de & "INDX" & $de & "ObjId:O" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & $Indx_MftRef & $de & "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$Indx_MftRef&" MftRefSeqNo:"&$Indx_MftRefSeqNo & $TextString & $de & "" & $de & "" & @CRLF)
+					Case $DoBodyfile
+						FileWriteLine($IndxEntriesObjIdOCsvFile, "" & $de & "ObjId:O" & $de & $Indx_MftRef & $de & "Offset:"&$RecordOffset&" Slack:" & $FromIndxSlack & " MftRef:"&$Indx_MftRef&" MftRefSeqNo:"&$Indx_MftRefSeqNo & $TextString & $de & "" & $de & "" & $de & "" & $de &  ""  & $de &  ""  & $de &  ""  & $de &  ""  & @CRLF)
+				EndSelect
+			EndIf
 			$EntryCounter += 1
 			;We can jump by fixed size since all entries in this index are of fixed size. In $I30 this is different because filename length varies.
 			$LocalOffset += 176
@@ -2567,7 +2937,19 @@ Func _HexToGuidStr($input,$mode)
 EndFunc
 
 Func _WriteIndxObjIdOModuleCsvHeader()
-	$Indx_Csv_Header = "Offset"&$de&"Vcn"&$de&"IsNotLeaf"&$de&"LastLsn"&$de&"FromIndxSlack"&$de&"DataOffset"&$de&"DataSize"&$de&"Padding1"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"Padding2"&$de&"MftRef"&$de&"MftRefSeqNo"&$de&"ObjectId"&$de&"ObjectId_Version"&$de&"ObjectId_Timestamp"&$de&"ObjectId_TimestampDec"&$de&"ObjectId_ClockSeq"&$de&"ObjectId_Node"&$de&"BirthVolumeId"&$de&"BirthVolumeId_Version"&$de&"BirthVolumeId_Timestamp"&$de&"BirthVolumeId_TimestampDec"&$de&"BirthVolumeId_ClockSeq"&$de&"BirthVolumeId_Node"&$de&"BirthObjectId"&$de&"BirthObjectId_Version"&$de&"BirthObjectId_Timestamp"&$de&"BirthObjectId_TimestampDec"&$de&"BirthObjectId_ClockSeq"&$de&"BirthObjectId_Node"&$de&"DomainId"&$de&"DomainId_Version"&$de&"DomainId_Timestamp"&$de&"DomainId_TimestampDec"&$de&"DomainId_ClockSeq"&$de&"DomainId_Node"&$de&"TextInformation"
+	Local $a
+	If $WithQuotes Then
+		$a = '"'
+	Else
+		$a = ""
+	EndIf
+	If $DoDefaultAll Then
+		$Indx_Csv_Header = $a&"Offset"&$a&$de&$a&"Vcn"&$a&$de&$a&"IsNotLeaf"&$a&$de&$a&"LastLsn"&$a&$de&$a&"FromIndxSlack"&$a&$de&$a&"DataOffset"&$a&$de&$a&"DataSize"&$a&$de&$a&"Padding1"&$a&$de&$a&"IndexEntrySize"&$a&$de&$a&"IndexKeySize"&$a&$de&$a&"Flags"&$a&$de&$a&"Padding2"&$a&$de&$a&"MftRef"&$a&$de&$a&"MftRefSeqNo"&$a&$de&$a&"ObjectId"&$a&$de&$a&"ObjectId_Version"&$a&$de&$a&"ObjectId_Timestamp"&$a&$de&$a&"ObjectId_TimestampDec"&$a&$de&$a&"ObjectId_ClockSeq"&$a&$de&$a&"ObjectId_Node"&$a&$de&$a&"BirthVolumeId"&$a&$de&$a&"BirthVolumeId_Version"&$a&$de&$a&"BirthVolumeId_Timestamp"&$a&$de&$a&"BirthVolumeId_TimestampDec"&$a&$de&$a&"BirthVolumeId_ClockSeq"&$a&$de&$a&"BirthVolumeId_Node"&$a&$de&$a&"BirthObjectId"&$a&$de&$a&"BirthObjectId_Version"&$a&$de&$a&"BirthObjectId_Timestamp"&$a&$de&$a&"BirthObjectId_TimestampDec"&$a&$de&$a&"BirthObjectId_ClockSeq"&$a&$de&$a&"BirthObjectId_Node"&$a&$de&$a&"DomainId"&$a&$de&$a&"DomainId_Version"&$a&$de&$a&"DomainId_Timestamp"&$a&$de&$a&"DomainId_TimestampDec"&$a&$de&$a&"DomainId_ClockSeq"&$a&$de&$a&"DomainId_Node"&$a&$de&$a&"TextInformation"&$a
+	ElseIf $Dol2t Then
+		$Indx_Csv_Header = $a&"Date"&$a&$de&$a&"Time"&$a&$de&$a&"Timezone"&$a&$de&$a&"MACB"&$a&$de&$a&"Source"&$a&$de&$a&"SourceType"&$a&$de&$a&"Type"&$a&$de&$a&"User"&$a&$de&$a&"Host"&$a&$de&$a&"Short"&$a&$de&$a&"Desc"&$a&$de&$a&"Version"&$a&$de&$a&"Filename"&$a&$de&$a&"Inode"&$a&$de&$a&"Notes"&$a&$de&$a&"Format"&$a&$de&$a&"Extra"&$a
+	ElseIf $DoBodyfile Then
+		$Indx_Csv_Header = $a&"MD5"&$a&$de&$a&"name"&$a&$de&$a&"inode"&$a&$de&$a&"mode_as_string"&$a&$de&$a&"UID"&$a&$de&$a&"GID"&$a&$de&$a&"size"&$a&$de&$a&"atime"&$a&$de&$a&"mtime"&$a&$de&$a&"ctime"&$a&$de&$a&"crtime"&$a
+	EndIf
 	FileWriteLine($IndxEntriesObjIdOCsvFile, $Indx_Csv_Header & @CRLF)
 EndFunc
 
@@ -2590,12 +2972,12 @@ Func _DecodeTimestampFromGuid($StampDecode)
 EndFunc
 
 Func _Decode_Reparse_R($InputData, $FirstEntryOffset)
-	Local $EntryCounter=0, $VerboseOn=1
+	Local $EntryCounter=0
 	$StartOffset = 1
 	$InputDataSize = StringLen($InputData)
 
-	ConsoleWrite("_Decode_Reparse_R():" & @CRLF)
-	ConsoleWrite(_HexEncode("0x"&$InputData) & @CRLF)
+	;ConsoleWrite("_Decode_Reparse_R():" & @CRLF)
+	;ConsoleWrite(_HexEncode("0x"&$InputData) & @CRLF)
 
 	Do
 		$RecordOffset = "0x" & Hex(Int($CurrentFileOffset + (($StartOffset-1)/2) + $FirstEntryOffset))
@@ -2663,7 +3045,7 @@ Func _Decode_Reparse_R($InputData, $FirstEntryOffset)
 			ConsoleWrite("Error: Invalid MftRefSeqNo: " & $KeyMftRefSeqNoOfReparsePoint & @crlf)
 			Return $EntryCounter
 		EndIf
-
+		#cs
 		ConsoleWrite(@CRLF)
 		ConsoleWrite(_HexEncode("0x"&StringMid($InputData, $StartOffset, $IndexEntrySize*2)) & @CRLF)
 		ConsoleWrite("$EntryCounter: " & $EntryCounter & @CRLF)
@@ -2675,7 +3057,7 @@ Func _Decode_Reparse_R($InputData, $FirstEntryOffset)
 		ConsoleWrite("$KeyReparseTag: " & $KeyReparseTag & @CRLF)
 		ConsoleWrite("$KeyMftRefOfReparsePoint: " & $KeyMftRefOfReparsePoint & @CRLF)
 		ConsoleWrite("$KeyMftRefSeqNoOfReparsePoint: " & $KeyMftRefSeqNoOfReparsePoint & @CRLF)
-
+		#ce
 		;Padding 4 bytes
 		$Padding3 = StringMid($InputData, $StartOffset + 56, 8)
 		$Padding3 = Dec(_SwapEndian($Padding3),2)
@@ -2684,7 +3066,26 @@ Func _Decode_Reparse_R($InputData, $FirstEntryOffset)
 			Return $EntryCounter
 		EndIf
 
-		FileWriteLine($IndxEntriesReparseRCsvFile, $RecordOffset&$de&$IndxCurrentVcn&$de&$IsNotLeafNode&$de&$IndxLastLsn&$de&$FromIndxSlack&$de&$DataOffset&$de&$DataSize&$de&$Padding1&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$Padding2&$de&$KeyMftRefOfReparsePoint&$de&$KeyMftRefSeqNoOfReparsePoint&$de&$KeyReparseTag&@crlf)
+		If $WithQuotes Then
+			Select
+				Case $DoDefaultAll
+					FileWriteLine($IndxEntriesReparseRCsvFile, '"'&$RecordOffset&'"'&$de&'"'&$IndxCurrentVcn&'"'&$de&'"'&$IsNotLeafNode&'"'&$de&'"'&$IndxLastLsn&'"'&$de&'"'&$FromIndxSlack&'"'&$de&'"'&$DataOffset&'"'&$de&'"'&$DataSize&'"'&$de&'"'&$Padding1&'"'&$de&'"'&$IndexEntrySize&'"'&$de&'"'&$IndexKeySize&'"'&$de&'"'&$Flags&'"'&$de&'"'&$Padding2&'"'&$de&'"'&$KeyMftRefOfReparsePoint&'"'&$de&'"'&$KeyMftRefSeqNoOfReparsePoint&'"'&$de&'"'&$KeyReparseTag&'"'&@crlf)
+				Case $Dol2t
+					FileWriteLine($IndxEntriesReparseRCsvFile, '"'&'"'& "" &'"' & $de & '"'& "" &'"' & $de & '"'& "" &'"' & $de & '"'&"MACB"&'"' & $de & '"'&"INDX"&'"' & $de & '"'&"Reparse:R"&'"' & $de & '"'& "" &'"' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& "" &'"' & $de & '"'&$KeyMftRefOfReparsePoint&'"' & $de & '"'&"Offset:"&$RecordOffset&" ReparseTag:"&$KeyReparseTag&" MftRefOfReparsePoint:"&$KeyMftRefOfReparsePoint&" MftRefSeqNoOfReparsePoint:"&$KeyMftRefSeqNoOfReparsePoint&'"' & $de & '""' & $de & '""' & @CRLF)
+				Case $DoBodyfile
+					FileWriteLine($IndxEntriesReparseRCsvFile, '""' & $de & '"'& "Reparse:R" &'"' & $de & '"'&$KeyMftRefOfReparsePoint&'"' & $de & '"'&"Reparse:R"&'"' & $de & '""' & $de & '""' & $de & '""' & $de & '"'& "" &'"' & $de & '"'& "" &'"' & $de & '"'& "" &'"' & $de & '"'& "" &'"' & @CRLF)
+			EndSelect
+		Else
+			Select
+				Case $DoDefaultAll
+					FileWriteLine($IndxEntriesReparseRCsvFile, $RecordOffset&$de&$IndxCurrentVcn&$de&$IsNotLeafNode&$de&$IndxLastLsn&$de&$FromIndxSlack&$de&$DataOffset&$de&$DataSize&$de&$Padding1&$de&$IndexEntrySize&$de&$IndexKeySize&$de&$Flags&$de&$Padding2&$de&$KeyMftRefOfReparsePoint&$de&$KeyMftRefSeqNoOfReparsePoint&$de&$KeyReparseTag&@crlf)
+				Case $Dol2t
+					FileWriteLine($IndxEntriesReparseRCsvFile, "" & $de & "" & $de & "" & $de & "MACB" & $de & "INDX" & $de & "Reparse:R" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & "" & $de & $KeyMftRefOfReparsePoint & $de & "Offset:"&$RecordOffset&" ReparseTag:"&$KeyReparseTag&" MftRefOfReparsePoint:"&$KeyMftRefOfReparsePoint&" MftRefSeqNoOfReparsePoint:"&$KeyMftRefSeqNoOfReparsePoint & $de & "" & $de & "" & @CRLF)
+				Case $DoBodyfile
+					FileWriteLine($IndxEntriesReparseRCsvFile, "" & $de & "Reparse:R" & $de & $KeyMftRefOfReparsePoint & $de & "Reparse:R" & $de & "" & $de & "" & $de & "" & $de &  ""  & $de &  ""  & $de &  ""  & $de &  ""  & @CRLF)
+			EndSelect
+		EndIf
+
 		$EntryCounter+=1
 		$StartOffset += $IndexEntrySize*2
 	Until $StartOffset >= $InputDataSize
@@ -2692,6 +3093,39 @@ Func _Decode_Reparse_R($InputData, $FirstEntryOffset)
 EndFunc
 
 Func _WriteIndxReparseRModuleCsvHeader()
-	$Indx_Csv_Header = "Offset"&$de&"Vcn"&$de&"IsNotLeaf"&$de&"LastLsn"&$de&"FromIndxSlack"&$de&"DataOffset"&$de&"DataSize"&$de&"Padding1"&$de&"IndexEntrySize"&$de&"IndexKeySize"&$de&"Flags"&$de&"Padding2"&$de&"MftRef"&$de&"MftRefSeqNo"&$de&"KeyReparseTag"
+	Local $a
+	If $WithQuotes Then
+		$a = '"'
+	Else
+		$a = ""
+	EndIf
+	If $DoDefaultAll Then
+		$Indx_Csv_Header = $a&"Offset"&$a&$de&$a&"Vcn"&$a&$de&$a&"IsNotLeaf"&$a&$de&$a&"LastLsn"&$a&$de&$a&"FromIndxSlack"&$a&$de&$a&"DataOffset"&$a&$de&$a&"DataSize"&$a&$de&$a&"Padding1"&$a&$de&$a&"IndexEntrySize"&$a&$de&$a&"IndexKeySize"&$a&$de&$a&"Flags"&$a&$de&$a&"Padding2"&$a&$de&$a&"MftRef"&$a&$de&$a&"MftRefSeqNo"&$a&$de&$a&"KeyReparseTag"&$a
+	ElseIf $Dol2t Then
+		$Indx_Csv_Header = $a&"Date"&$a&$de&$a&"Time"&$a&$de&$a&"Timezone"&$a&$de&$a&"MACB"&$a&$de&$a&"Source"&$a&$de&$a&"SourceType"&$a&$de&$a&"Type"&$a&$de&$a&"User"&$a&$de&$a&"Host"&$a&$de&$a&"Short"&$a&$de&$a&"Desc"&$a&$de&$a&"Version"&$a&$de&$a&"Filename"&$a&$de&$a&"Inode"&$a&$de&$a&"Notes"&$a&$de&$a&"Format"&$a&$de&$a&"Extra"&$a
+	ElseIf $DoBodyfile Then
+		$Indx_Csv_Header = $a&"MD5"&$a&$de&$a&"name"&$a&$de&$a&"inode"&$a&$de&$a&"mode_as_string"&$a&$de&$a&"UID"&$a&$de&$a&"GID"&$a&$de&$a&"size"&$a&$de&$a&"atime"&$a&$de&$a&"mtime"&$a&$de&$a&"ctime"&$a&$de&$a&"crtime"&$a
+	EndIf
 	FileWriteLine($IndxEntriesReparseRCsvFile, $Indx_Csv_Header & @CRLF)
+EndFunc
+
+Func _SetDateTimeFormats()
+	Select
+		Case $DateTimeFormat = 1
+			$CharsToGrabDate = 8
+			$CharStartTime = 9
+			$CharsToGrabTime = 6
+		Case $DateTimeFormat = 2
+			$CharsToGrabDate = 10
+			$CharStartTime = 11
+			$CharsToGrabTime = 8
+		Case $DateTimeFormat = 3
+			$CharsToGrabDate = 10
+			$CharStartTime = 11
+			$CharsToGrabTime = 8
+		Case $DateTimeFormat = 6
+			$CharsToGrabDate = 10
+			$CharStartTime = 11
+			$CharsToGrabTime = 8
+	EndSelect
 EndFunc

@@ -1,5 +1,12 @@
 Indx2Csv Changelog
 
+1.0.0.14
+Improved slack parser for I30.
+Added support for new outputformats: log2timeline and bodyfile.
+Added new commandline param /StrictNameCheck for use with I30 and unicode falsepositives in slack.
+Improved quality in the sql files generated, now also including the new output formats.
+Fixed a bug with the quotes configuration.
+
 1.0.0.13
 Fixed a bug that caused some valid INDX data to be missed when system files contain zeroed filestamps. 
 
