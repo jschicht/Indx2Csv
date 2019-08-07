@@ -72,6 +72,12 @@ Indx2Csv.exe /IndxFile:c:\temp\chunk.wofixups.INDX /Fixups:0 /TSFormat:1 /TSPrec
 Indx2Csv.exe /IndxFile:C:\temp\fragment.bin /ScanMode:10 /VerifyFragment:1 /OutputPath:e:\I30Output /OutFragmentName:FragmentCollection.bin /CleanUp:1
 Indx2Csv.exe /IndxFile:e:\I30Output\FragmentCollection.bin /OutputPath:e:\I30Output /ScanMode:10 /Fixups:0
 
+Timestamp explanation
+CTime -> File Create Time.
+ATime -> File Modified Time.
+MTime -> MFT Entry modified Time.
+RTime -> File Last Access Time.
+
 The available TimeZone's to use are:
 -12.00
 -11.00
